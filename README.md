@@ -30,7 +30,7 @@ println!("{:#?}", pos);
 Might output something like:
 ```rust
 Some(
-    Matrix {
+    Array {
         name: "pos",
         size: [
             2,
