@@ -1,8 +1,16 @@
 [package]
-name = "matio"
-version = "0.0.1"
+name = "matfile"
+version = "0.0.1" # remember to update html_root_url
 authors = ["Daniel Thul <daniel.thul@gmail.com>"]
 edition = "2018"
+
+categories = ["parser-implementations"]
+description = "Matfile is a library for reading and writing Matlab \".mat\" data files."
+exclude = ["tests/*", "src/bin/*"]
+keywords = ["matlab", "mat", "file", "reader", "writer"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/dthul/matfile.git"
 
 # [features]
 # default = []
