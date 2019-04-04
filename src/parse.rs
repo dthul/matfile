@@ -1,11 +1,9 @@
-#[macro_use]
-extern crate enum_primitive_derive;
 use libflate::zlib::Decoder;
 use nom::{
     alt, apply, be_f32, be_f64, be_i16, be_i32, be_i64, be_i8, be_u16, be_u32, be_u64, be_u8, char,
     complete, cond, count, count_fixed, do_parse, error_position, i32, le_f32, le_f64, le_i16,
-    le_i32, le_i64, le_i8, le_u16, le_u32, le_u64, le_u8, length_value, map, map_res, not, opt,
-    pair, peek, switch, tag, take, u16, u32, value, IResult,
+    le_i32, le_i64, le_i8, le_u16, le_u32, le_u64, le_u8, length_value, many0, map, map_res, not,
+    opt, pair, peek, switch, tag, take, u16, u32, value, IResult,
 };
 use num_traits::FromPrimitive;
 use std::io::Read;
@@ -13,14 +11,14 @@ use std::io::Read;
 // https://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 // https://www.mathworks.com/help/matlab/import_export/mat-file-versions.html
 
-#[derive(Debug)]
-struct Header {
+#[derive(Clone, Debug)]
+pub struct Header {
     text: String,
     is_little_endian: bool,
 }
 
-#[derive(Debug)]
-enum NumericData {
+#[derive(Clone, Debug)]
+pub enum NumericData {
     Int8(Vec<i8>),
     UInt8(Vec<u8>),
     Int16(Vec<i16>),
@@ -65,8 +63,8 @@ impl NumericData {
     }
 }
 
-#[derive(Debug)]
-enum DataElement {
+#[derive(Clone, Debug)]
+pub enum DataElement {
     NumericMatrix(
         ArrayFlags,
         Dimensions,
@@ -100,13 +98,13 @@ fn assert(i: &[u8], v: bool) -> IResult<&[u8], ()> {
     }
 }
 
-fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
+pub fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
     do_parse!(
         i,
         // Make sure that the first four bytes are not null.
         peek!(count_fixed!(_, pair!(not!(char!('\0')), take!(1)), 4)) >>
         text: take!(116) >> // text field
-        ssdo: take!(8) >> // subsystem data offset
+        _ssdo: take!(8) >> // subsystem data offset
         // Assume little endian for now
         version: u16!(nom::Endianness::Little) >>
         // Check the endianness
@@ -155,16 +153,16 @@ fn ceil_to_multiple(x: u32, multiple: u32) -> u32 {
     }
 }
 
-#[derive(Debug)]
-struct ArrayFlags {
-    complex: bool,
-    global: bool,
-    logical: bool,
-    class: ArrayType,
+#[derive(Clone, Copy, Debug)]
+pub struct ArrayFlags {
+    pub complex: bool,
+    pub global: bool,
+    pub logical: bool,
+    pub class: ArrayType,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, Primitive)]
-enum DataType {
+pub enum DataType {
     Int8 = 1,
     UInt8 = 2,
     Int16 = 3,
@@ -195,7 +193,7 @@ enum DataType {
 // }
 
 #[derive(Debug, PartialEq, Clone, Copy, Primitive)]
-enum ArrayType {
+pub enum ArrayType {
     Cell = 1,
     Struct = 2,
     Object = 3,
@@ -225,10 +223,6 @@ impl ArrayType {
         }
     }
 
-    fn is_char(&self) -> bool {
-        *self == ArrayType::Char
-    }
-
     fn numeric_data_type(&self) -> Option<DataType> {
         match self {
             ArrayType::Double => Some(DataType::Double),
@@ -246,10 +240,10 @@ impl ArrayType {
     }
 }
 
-type Dimensions = Vec<i32>;
+pub type Dimensions = Vec<i32>;
 
-#[derive(Debug)]
-struct DataElementTag {
+#[derive(Clone, Copy, Debug)]
+pub struct DataElementTag {
     data_type: DataType,
     data_byte_size: u32,
     padding_byte_size: u32,
@@ -571,18 +565,24 @@ fn parse_unsupported_data_element(
     Ok((&[], DataElement::Unsupported))
 }
 
-fn main() {
-    let data = include_bytes!("../double_as_int16.mat");
-    let (remaining, header) = parse_header(data).expect("parsing failed");
-    let (remaining, data_element) = parse_next_data_element(
-        remaining,
-        if header.is_little_endian {
-            nom::Endianness::Little
-        } else {
-            nom::Endianness::Big
-        },
+pub struct ParseResult {
+    pub header: Header,
+    pub data_elements: Vec<DataElement>,
+}
+
+pub fn parse_all(i: &[u8]) -> IResult<&[u8], ParseResult> {
+    do_parse!(
+        i,
+        header: parse_header
+            >> endianness: value!(if header.is_little_endian {
+                nom::Endianness::Little
+            } else {
+                nom::Endianness::Big
+            })
+            >> data_elements: many0!(complete!(apply!(parse_next_data_element, endianness)))
+            >> (ParseResult {
+                header: header,
+                data_elements: data_elements,
+            })
     )
-    .expect("Parsing failed");
-    println!("{:?}", header);
-    println!("{:?}", data_element);
 }
