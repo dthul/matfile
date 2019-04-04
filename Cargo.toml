@@ -1,0 +1,21 @@
+[package]
+name = "matio"
+version = "0.0.1"
+authors = ["Daniel Thul <daniel.thul@gmail.com>"]
+edition = "2018"
+
+# [features]
+# default = []
+
+[dependencies]
+enum-primitive-derive = "^0.1"
+libflate = "0.1"
+num-traits = "0.2"
+
+[dependencies.nom]
+version = "^4.2"
+features = ["verbose-errors"]
+
+# [dependencies.ndarray]
+# version = "0.12.1"
+# optional = true
