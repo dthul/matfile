@@ -12,23 +12,53 @@ pub struct MatFile {
 
 #[derive(Clone, Debug)]
 pub struct Matrix {
-    dims: parse::Dimensions,
     name: String,
+    size: parse::Dimensions,
     data: NumericData,
 }
 
 #[derive(Clone, Debug)]
 pub enum NumericData {
-    Int8(Vec<i8>, Option<Vec<i8>>),
-    UInt8(Vec<u8>, Option<Vec<u8>>),
-    Int16(Vec<i16>, Option<Vec<i16>>),
-    UInt16(Vec<u16>, Option<Vec<u16>>),
-    Int32(Vec<i32>, Option<Vec<i32>>),
-    UInt32(Vec<u32>, Option<Vec<u32>>),
-    Int64(Vec<i64>, Option<Vec<i64>>),
-    UInt64(Vec<u64>, Option<Vec<u64>>),
-    Single(Vec<f32>, Option<Vec<f32>>),
-    Double(Vec<f64>, Option<Vec<f64>>),
+    Int8 {
+        real: Vec<i8>,
+        imag: Option<Vec<i8>>,
+    },
+    UInt8 {
+        real: Vec<u8>,
+        imag: Option<Vec<u8>>,
+    },
+    Int16 {
+        real: Vec<i16>,
+        imag: Option<Vec<i16>>,
+    },
+    UInt16 {
+        real: Vec<u16>,
+        imag: Option<Vec<u16>>,
+    },
+    Int32 {
+        real: Vec<i32>,
+        imag: Option<Vec<i32>>,
+    },
+    UInt32 {
+        real: Vec<u32>,
+        imag: Option<Vec<u32>>,
+    },
+    Int64 {
+        real: Vec<i64>,
+        imag: Option<Vec<i64>>,
+    },
+    UInt64 {
+        real: Vec<u64>,
+        imag: Option<Vec<u64>>,
+    },
+    Single {
+        real: Vec<f32>,
+        imag: Option<Vec<f32>>,
+    },
+    Double {
+        real: Vec<f64>,
+        imag: Option<Vec<f64>>,
+    },
 }
 
 fn try_convert_number_format(
@@ -165,46 +195,106 @@ impl NumericData {
         };
         // The next step should never fail unless there is a bug in the code
         match (real, imag) {
+            (parse::NumericData::Double(real), None) => Ok(NumericData::Double {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::Double(real), Some(parse::NumericData::Double(imag))) => {
-                Ok(NumericData::Double(real, Some(imag)))
+                Ok(NumericData::Double {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::Double(real), None) => Ok(NumericData::Double(real, None)),
+            (parse::NumericData::Single(real), None) => Ok(NumericData::Single {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::Single(real), Some(parse::NumericData::Single(imag))) => {
-                Ok(NumericData::Single(real, Some(imag)))
+                Ok(NumericData::Single {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::Single(real), None) => Ok(NumericData::Single(real, None)),
+            (parse::NumericData::UInt64(real), None) => Ok(NumericData::UInt64 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::UInt64(real), Some(parse::NumericData::UInt64(imag))) => {
-                Ok(NumericData::UInt64(real, Some(imag)))
+                Ok(NumericData::UInt64 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::UInt64(real), None) => Ok(NumericData::UInt64(real, None)),
+            (parse::NumericData::Int64(real), None) => Ok(NumericData::Int64 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::Int64(real), Some(parse::NumericData::Int64(imag))) => {
-                Ok(NumericData::Int64(real, Some(imag)))
+                Ok(NumericData::Int64 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::Int64(real), None) => Ok(NumericData::Int64(real, None)),
+            (parse::NumericData::UInt32(real), None) => Ok(NumericData::UInt32 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::UInt32(real), Some(parse::NumericData::UInt32(imag))) => {
-                Ok(NumericData::UInt32(real, Some(imag)))
+                Ok(NumericData::UInt32 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::UInt32(real), None) => Ok(NumericData::UInt32(real, None)),
+            (parse::NumericData::Int32(real), None) => Ok(NumericData::Int32 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::Int32(real), Some(parse::NumericData::Int32(imag))) => {
-                Ok(NumericData::Int32(real, Some(imag)))
+                Ok(NumericData::Int32 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::Int32(real), None) => Ok(NumericData::Int32(real, None)),
+            (parse::NumericData::UInt16(real), None) => Ok(NumericData::UInt16 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::UInt16(real), Some(parse::NumericData::UInt16(imag))) => {
-                Ok(NumericData::UInt16(real, Some(imag)))
+                Ok(NumericData::UInt16 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::UInt16(real), None) => Ok(NumericData::UInt16(real, None)),
+            (parse::NumericData::Int16(real), None) => Ok(NumericData::Int16 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::Int16(real), Some(parse::NumericData::Int16(imag))) => {
-                Ok(NumericData::Int16(real, Some(imag)))
+                Ok(NumericData::Int16 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::Int16(real), None) => Ok(NumericData::Int16(real, None)),
+            (parse::NumericData::UInt8(real), None) => Ok(NumericData::UInt8 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::UInt8(real), Some(parse::NumericData::UInt8(imag))) => {
-                Ok(NumericData::UInt8(real, Some(imag)))
+                Ok(NumericData::UInt8 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::UInt8(real), None) => Ok(NumericData::UInt8(real, None)),
+            (parse::NumericData::Int8(real), None) => Ok(NumericData::Int8 {
+                real: real,
+                imag: None,
+            }),
             (parse::NumericData::Int8(real), Some(parse::NumericData::Int8(imag))) => {
-                Ok(NumericData::Int8(real, Some(imag)))
+                Ok(NumericData::Int8 {
+                    real: real,
+                    imag: Some(imag),
+                })
             }
-            (parse::NumericData::Int8(real), None) => Ok(NumericData::Int8(real, None)),
             _ => return Err(Error::InternalError),
         }
     }
@@ -213,7 +303,7 @@ impl NumericData {
 #[derive(Debug)]
 pub enum Error {
     IOError(std::io::Error),
-    ParseError,
+    ParseError(nom::Err<&'static [u8], u32>),
     ConversionError,
     InternalError,
 }
@@ -222,8 +312,10 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Error::IOError(_) => write!(f, "An I/O error occurred"),
-            Error::ParseError => write!(f, "An error occurred while parsing the file"),
-            Error::ConversionError => write!(f, "An error occurred while converting number formats"),
+            Error::ParseError(_) => write!(f, "An error occurred while parsing the file"),
+            Error::ConversionError => {
+                write!(f, "An error occurred while converting number formats")
+            }
             Error::InternalError => write!(f, "An internal error occurred, this is a bug"),
         }
     }
@@ -243,8 +335,12 @@ impl Matrix {
         &self.name
     }
 
-    pub fn shape(&self) -> &parse::Dimensions {
-        &self.dims
+    pub fn size(&self) -> &parse::Dimensions {
+        &self.size
+    }
+
+    pub fn ndims(&self) -> usize {
+        self.size.len()
     }
 
     pub fn data(&self) -> &NumericData {
@@ -258,7 +354,8 @@ impl MatFile {
         reader
             .read_to_end(&mut buf)
             .map_err(|err| Error::IOError(err))?;
-        let (_remaining, parse_result) = parse::parse_all(&buf).map_err(|_err| Error::ParseError)?;
+        let (_remaining, parse_result) =
+            parse::parse_all(&buf).map_err(|err| Error::ParseError(parse::replace_err_slice(err, &[])))?;
         let matrices: Result<Vec<Matrix>, Error> = parse_result
             .data_elements
             .into_iter()
@@ -269,7 +366,7 @@ impl MatFile {
                         Err(err) => return Some(Err(err)),
                     };
                     Some(Ok(Matrix {
-                        dims: dims,
+                        size: dims,
                         name: name,
                         data: numeric_data,
                     }))
@@ -303,7 +400,6 @@ mod tests {
     fn double_matrix() {
         let data = include_bytes!("../tests/double.mat");
         let mat_file = MatFile::parse(data.as_ref()).unwrap();
-        println!("{:#?}", mat_file);
     }
 
 }
