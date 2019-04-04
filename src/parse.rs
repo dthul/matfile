@@ -122,25 +122,24 @@ pub fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
 fn parse_next_data_element(i: &[u8], endianness: nom::Endianness) -> IResult<&[u8], DataElement> {
     do_parse!(
         i,
-        // TODO: use parse_data_element_tag
-        data_type: u32!(endianness) >>
+        data_element_tag: apply!(parse_data_element_tag, endianness) >>
         next_parser: value!(
-            match DataType::from_u32(data_type) {
-                Some(DataType::Matrix) => parse_matrix_data_element,
-                Some(DataType::Compressed) => parse_compressed_data_element,
+            match data_element_tag.data_type {
+                DataType::Matrix => parse_matrix_data_element,
+                DataType::Compressed => parse_compressed_data_element,
                 _ => {
-                    println!("Unsupported data type: {}", data_type);
+                    println!("Unsupported variable type: {:?} (must be Matrix or Compressed)", data_element_tag.data_type);
                     parse_unsupported_data_element
                 }
             }
         ) >>
-        data_length: peek!(u32!(endianness)) >>
-        // data_bytes: take!(data_length) >>
-        data_element: length_value!(u32!(endianness), apply!(next_parser, endianness)) >>
-        // Make sure that we end up on a 8 byte boundary (ignore if there is not enough data left)
-        opt!(complete!(take!(
-            ceil_to_multiple(data_length, 8) - data_length
-        ))) >>
+        data_element: length_value!(value!(data_element_tag.data_byte_size), apply!(next_parser, endianness)) >>
+        // Take care of padding. It seems like either all variables in a mat file compressed or none are.
+        // If the variables are compressed there is no alignment to take care of (only uncompressed data
+        // needs to be aligned according to the spec). Otherwise make sure that we end up on a 8 byte
+        // boundary (ignore if there is not enough data left)
+        padding_bytes: value!(if data_element_tag.data_type == DataType::Compressed { 0 } else { data_element_tag.padding_byte_size }) >>
+        opt!(complete!(take!(padding_bytes))) >>
         (data_element)
     )
 }
@@ -547,7 +546,7 @@ fn replace_context_slice<'old, 'new, E>(
     }
 }
 
-fn replace_err_slice<'old, 'new, E>(
+pub fn replace_err_slice<'old, 'new, E>(
     err: nom::Err<&'old [u8], E>,
     new_slice: &'new [u8],
 ) -> nom::Err<&'new [u8], E> {
