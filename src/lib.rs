@@ -1,22 +1,57 @@
-#![doc(html_root_url = "https://docs.rs/matfile/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/matfile/0.1.0")]
 
 #[macro_use]
 extern crate enum_primitive_derive;
 
 mod parse;
 
+/// MatFile is a collection of named arrays.
+/// 
+/// You can load a ".mat" file from disk like this:
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let file = std::fs::File::open("tests/double.mat")?;
+/// let mat_file = matfile::MatFile::parse(file)?;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct MatFile {
-    matrices: Vec<Matrix>,
+    arrays: Vec<Array>,
 }
 
+/// A numeric array (the only type supported at the moment).
+/// 
+/// You can access the arrays of a MatFile either by name or by iterating
+/// through all of them:
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # let file = std::fs::File::open("tests/double.mat")?;
+/// # let mat_file = matfile::MatFile::parse(file)?;
+/// if let Some(array_a) = mat_file.find_by_name("A") {
+///     println!("Array \"A\": {:#?}", array_a);
+/// }
+/// 
+/// for array in mat_file.arrays() {
+///     println!("Found array named {} of size {:?}", array.name(), array.size());
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
-pub struct Matrix {
+pub struct Array {
     name: String,
     size: parse::Dimensions,
     data: NumericData,
 }
 
+/// Stores the data of a numerical array and abstracts over the actual data
+/// type used. Real and imaginary parts are stored in separate vectors with the
+/// imaginary part being optional.
+/// 
+/// Numerical data is stored in column-major order. When talking about higher
+/// dimensional arrays this means that the index of the first dimension varies
+/// fastest.
 #[derive(Clone, Debug)]
 pub enum NumericData {
     Int8 {
@@ -330,33 +365,55 @@ impl std::error::Error for Error {
     }
 }
 
-impl Matrix {
+impl Array {
+    /// The name of this array.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// The size of this array.
+    /// 
+    /// The number of entries in this vector is equal to the number of
+    /// dimensions of this array. Each array has at least two dimensions.
+    /// For two-dimensional arrays the first dimension is the number of rows
+    /// while the second dimension is the number of columns.
     pub fn size(&self) -> &parse::Dimensions {
         &self.size
     }
 
+    /// The number of dimensions of this array. Is at least two.
     pub fn ndims(&self) -> usize {
         self.size.len()
     }
 
+    /// The actual numerical data stored in this array.
+    /// 
+    /// ```rust
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let file = std::fs::File::open("tests/double.mat")?;
+    /// # let mat_file = matfile::MatFile::parse(file)?;
+    /// # let array = &mat_file.arrays()[0];
+    /// if let matfile::NumericData::Double { real: real, imag: _ } = array.data() {
+    ///     println!("Real part of the data: {:?}", real);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn data(&self) -> &NumericData {
         &self.data
     }
 }
 
 impl MatFile {
+    /// Tries to parse a byte sequence as a ".mat" file.
     pub fn parse<R: std::io::Read>(mut reader: R) -> Result<Self, Error> {
         let mut buf = Vec::new();
         reader
             .read_to_end(&mut buf)
             .map_err(|err| Error::IOError(err))?;
-        let (_remaining, parse_result) =
-            parse::parse_all(&buf).map_err(|err| Error::ParseError(parse::replace_err_slice(err, &[])))?;
-        let matrices: Result<Vec<Matrix>, Error> = parse_result
+        let (_remaining, parse_result) = parse::parse_all(&buf)
+            .map_err(|err| Error::ParseError(parse::replace_err_slice(err, &[])))?;
+        let arrays: Result<Vec<Array>, Error> = parse_result
             .data_elements
             .into_iter()
             .filter_map(|data_element| match data_element {
@@ -365,7 +422,7 @@ impl MatFile {
                         Ok(numeric_data) => numeric_data,
                         Err(err) => return Some(Err(err)),
                     };
-                    Some(Ok(Matrix {
+                    Some(Ok(Array {
                         size: dims,
                         name: name,
                         data: numeric_data,
@@ -374,32 +431,81 @@ impl MatFile {
                 _ => None,
             })
             .collect();
-        let matrices = matrices?;
-        Ok(MatFile { matrices: matrices })
+        let arrays = arrays?;
+        Ok(MatFile { arrays: arrays })
     }
 
-    pub fn matrices(&self) -> &Vec<Matrix> {
-        &self.matrices
+    /// List of all arrays in this .mat file.
+    /// 
+    /// When parsing a .mat file all arrays of unsupported type (currently all
+    /// non-numerical and sparse arrays) will be ignored and will thus not be
+    /// part of this list.
+    pub fn arrays(&self) -> &Vec<Array> {
+        &self.arrays
     }
 
-    pub fn find_by_name<'me>(&'me self, name: &'_ str) -> Option<&'me Matrix> {
-        for matrix in &self.matrices {
-            if matrix.name == name {
-                return Some(matrix);
+    /// Returns an array with the given name if it exists. Case sensitive.
+    /// 
+    /// When parsing a .mat file all arrays of unsupported type (currently all
+    /// non-numerical and sparse arrays) will be ignored and will thus not be
+    /// returned by this function.
+    pub fn find_by_name<'me>(&'me self, name: &'_ str) -> Option<&'me Array> {
+        for array in &self.arrays {
+            if array.name == name {
+                return Some(array);
             }
         }
         None
     }
 }
 
+// TODO: improve tests.
+// The tests are not very comprehensive yet and they only test whether
+// the files can be loaded without error, but not whether the result
+// is actually correct.
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn double_matrix() {
+    fn double_array() {
         let data = include_bytes!("../tests/double.mat");
-        let mat_file = MatFile::parse(data.as_ref()).unwrap();
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
     }
 
+    #[test]
+    fn double_as_int16_array() {
+        let data = include_bytes!("../tests/double_as_int16.mat");
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
+    }
+
+    #[test]
+    fn double_as_uint8_array() {
+        let data = include_bytes!("../tests/double_as_uint8.mat");
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
+    }
+
+    #[test]
+    fn single_complex_array() {
+        let data = include_bytes!("../tests/single_complex.mat");
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
+    }
+
+    #[test]
+    fn two_arrays() {
+        let data = include_bytes!("../tests/two_arrays.mat");
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
+    }
+
+    #[test]
+    fn multidimensional_array() {
+        let data = include_bytes!("../tests/multidimensional.mat");
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
+    }
+
+    #[test]
+    fn long_name() {
+        let data = include_bytes!("../tests/long_name.mat");
+        let _mat_file = MatFile::parse(data.as_ref()).unwrap();
+    }
 }
