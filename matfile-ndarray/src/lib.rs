@@ -1,5 +1,52 @@
 #![doc(html_root_url = "https://docs.rs/matfile-ndarray/0.1.0")]
 
+//! Helpers for converting between `matfile::Array` and `ndarray::Array`.
+//! 
+//! While `matfile` arrays abstract over the underlying data type, `ndarray`
+//! arrays are parameterized by a concrete data type. Thus the conversions
+//! provided are fallible in case the data types are not compatible.
+//! 
+//! # Examples
+//! 
+//! First, bring the `TryInto` trait into scope:
+//! 
+//! ```rust
+//! use matfile_ndarray::TryInto;
+//! ```
+//! 
+//! ## Dynamically dimensioned arrays
+//! 
+//! Converting a `matfile` array `mf_arr` to a dynamic dimension `ndarray` array
+//! `nd_arr`:
+//! ```rust
+//! # fn main() -> Result<(), Box<std::error::Error>> {
+//! #     let data = include_bytes!("../../tests/multidimensional.mat");
+//! #     let mat_file = matfile::MatFile::parse(data.as_ref()).unwrap();
+//! #     let mf_arr = &mat_file.arrays()[0];
+//! #     use ndarray;
+//! #     use matfile_ndarray::TryInto;
+//! let nd_arr: ndarray::ArrayD<f64> = mf_arr.try_into()?;
+//! #     Ok(())
+//! # }
+//! ```
+//! 
+//! ## Statically dimensioned arrays
+//! 
+//! Converting a `matfile` array `mf_arr` to a static dimension `ndarray` array
+//! `nd_arr`:
+//! ```rust
+//! # fn main() -> Result<(), Box<std::error::Error>> {
+//! #     let data = include_bytes!("../../tests/single_complex.mat");
+//! #     let mat_file = matfile::MatFile::parse(data.as_ref()).unwrap();
+//! #     let mf_arr = &mat_file.arrays()[0];
+//! #     use ndarray;
+//! #     use matfile_ndarray::TryInto;
+//! #     use num_complex;
+//! let nd_arr: ndarray::Array2<num_complex::Complex<f32>> = mf_arr.try_into()?;
+//! #     Ok(())
+//! # }
+//! ```
+
 use matfile as mf;
 use ndarray as nd;
 use ndarray::IntoDimension;
@@ -8,7 +55,10 @@ use num_complex::Complex;
 
 #[derive(Debug)]
 pub enum Error {
+    /// Generated when the shape (number of dimensions and their respective
+    /// sizes) do not match
     ShapeError,
+    /// Generated when the number formats are incompatible
     TypeError,
 }
 
@@ -27,9 +77,9 @@ impl std::error::Error for Error {
     }
 }
 
-// This trait is at the time of this writing a nightly-only experimental API
-// and so we just replicate it here, so it will be easy to switch to it later
-// on.
+/// This trait is at the time of this writing a nightly-only experimental API
+/// and so we just replicate it here, so it will be easy to switch to it later
+/// on.
 pub trait TryInto<T> {
     type Error;
     fn try_into(self) -> Result<T, Self::Error>;

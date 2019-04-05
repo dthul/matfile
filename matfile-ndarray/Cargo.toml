@@ -12,6 +12,6 @@ readme = "README.md"
 repository = "https://github.com/dthul/matfile"
 
 [dependencies]
-matfile = { version = "0.1", path = ".." }
+matfile = { version = "0.2", path = ".." }
 ndarray = "0.12"
 num-complex = "0.2"
