@@ -1,0 +1,17 @@
+[package]
+name = "matfile-ndarray"
+version = "0.1.0" # remember to update html_root_url
+authors = ["Daniel Thul <daniel.thul@gmail.com>"]
+edition = "2018"
+
+description = "Utility library to convert between matfile and ndarray array formats"
+exclude = ["tests/*", "src/bin/*"]
+keywords = ["matlab", "matfile", "array", "ndarray", "convert"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/dthul/matfile"
+
+[dependencies]
+matfile = { version = "0.1", path = ".." }
+ndarray = "0.12"
+num-complex = "0.2"

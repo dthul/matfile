@@ -41,7 +41,7 @@ pub struct MatFile {
 #[derive(Clone, Debug)]
 pub struct Array {
     name: String,
-    size: parse::Dimensions,
+    size: Vec<usize>,
     data: NumericData,
 }
 
@@ -377,7 +377,7 @@ impl Array {
     /// dimensions of this array. Each array has at least two dimensions.
     /// For two-dimensional arrays the first dimension is the number of rows
     /// while the second dimension is the number of columns.
-    pub fn size(&self) -> &parse::Dimensions {
+    pub fn size(&self) -> &Vec<usize> {
         &self.size
     }
 
@@ -418,12 +418,13 @@ impl MatFile {
             .into_iter()
             .filter_map(|data_element| match data_element {
                 parse::DataElement::NumericMatrix(flags, dims, name, real, imag) => {
+                    let size = dims.into_iter().map(|d| d as usize).collect();
                     let numeric_data = match NumericData::try_from(flags.class, real, imag) {
                         Ok(numeric_data) => numeric_data,
                         Err(err) => return Some(Err(err)),
                     };
                     Some(Ok(Array {
-                        size: dims,
+                        size: size,
                         name: name,
                         data: numeric_data,
                     }))
