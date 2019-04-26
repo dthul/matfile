@@ -59,7 +59,7 @@
 extern crate enum_primitive_derive;
 
 mod parse;
-
+mod sparse;
 /// MatFile is a collection of named arrays.
 /// 
 /// You can load a ".mat" file from disk like this:
