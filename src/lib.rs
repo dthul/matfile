@@ -1,13 +1,13 @@
 #![doc(html_root_url = "https://docs.rs/matfile/0.2.0")]
 
 //! Matfile is a library for reading (and in the future writing) Matlab ".mat" files.
-//! 
+//!
 //! __Please note__: This library is still alpha quality software and only implements a subset of the features supported by .mat files.
-//! 
+//!
 //! ## Feature Status
-//! 
+//!
 //! Matfile currently allows you to load numeric arrays from .mat files (all floating point and integer types, including complex numbers). All other types are currently ignored.
-//! 
+//!
 //! * [ ] Loading .mat files
 //!   * [x] Numeric arrays
 //!   * [ ] Cell arrays
@@ -16,11 +16,11 @@
 //!   * [ ] Character arrays
 //!   * [ ] Sparse arrays
 //! * [ ] Writing .mat files
-//! 
+//!
 //! ## Examples
-//! 
+//!
 //! Loading a .mat file from disk and accessing one of its arrays by name:
-//! 
+//!
 //! ```rust
 //! # pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let file = std::fs::File::open("tests/double.mat")?;
@@ -59,9 +59,9 @@
 extern crate enum_primitive_derive;
 
 mod parse;
-mod sparse;
+
 /// MatFile is a collection of named arrays.
-/// 
+///
 /// You can load a ".mat" file from disk like this:
 /// ```rust
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +76,7 @@ pub struct MatFile {
 }
 
 /// A numeric array (the only type supported at the moment).
-/// 
+///
 /// You can access the arrays of a MatFile either by name or by iterating
 /// through all of them:
 /// ```rust
@@ -86,7 +86,7 @@ pub struct MatFile {
 /// if let Some(array_a) = mat_file.find_by_name("A") {
 ///     println!("Array \"A\": {:#?}", array_a);
 /// }
-/// 
+///
 /// for array in mat_file.arrays() {
 ///     println!("Found array named {} of size {:?}", array.name(), array.size());
 /// }
@@ -103,7 +103,7 @@ pub struct Array {
 /// Stores the data of a numerical array and abstracts over the actual data
 /// type used. Real and imaginary parts are stored in separate vectors with the
 /// imaginary part being optional.
-/// 
+///
 /// Numerical data is stored in column-major order. When talking about higher
 /// dimensional arrays this means that the index of the first dimension varies
 /// fastest.
@@ -153,119 +153,119 @@ pub enum NumericData {
 
 fn try_convert_number_format(
     target_type: parse::ArrayType,
-    data: parse::NumericData,
-) -> Result<parse::NumericData, Error> {
+    data: parse::RawNumericData,
+) -> Result<parse::RawNumericData, Error> {
     match target_type {
         parse::ArrayType::Double => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::Double(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::Double(
                 data.into_iter().map(|x| x as f64).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::Double(
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::Double(
                 data.into_iter().map(|x| x as f64).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::Double(
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::Double(
                 data.into_iter().map(|x| x as f64).collect(),
             )),
-            parse::NumericData::Int32(data) => Ok(parse::NumericData::Double(
+            parse::RawNumericData::Int32(data) => Ok(parse::RawNumericData::Double(
                 data.into_iter().map(|x| x as f64).collect(),
             )),
-            parse::NumericData::Double(data) => Ok(parse::NumericData::Double(data)),
+            parse::RawNumericData::Double(data) => Ok(parse::RawNumericData::Double(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::Single => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::Single(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::Single(
                 data.into_iter().map(|x| x as f32).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::Single(
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::Single(
                 data.into_iter().map(|x| x as f32).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::Single(
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::Single(
                 data.into_iter().map(|x| x as f32).collect(),
             )),
-            parse::NumericData::Int32(data) => Ok(parse::NumericData::Single(
+            parse::RawNumericData::Int32(data) => Ok(parse::RawNumericData::Single(
                 data.into_iter().map(|x| x as f32).collect(),
             )),
-            parse::NumericData::Single(data) => Ok(parse::NumericData::Single(data)),
+            parse::RawNumericData::Single(data) => Ok(parse::RawNumericData::Single(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::UInt64 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::UInt64(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::UInt64(
                 data.into_iter().map(|x| x as u64).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::UInt64(
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::UInt64(
                 data.into_iter().map(|x| x as u64).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::UInt64(
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::UInt64(
                 data.into_iter().map(|x| x as u64).collect(),
             )),
-            parse::NumericData::Int32(data) => Ok(parse::NumericData::UInt64(
+            parse::RawNumericData::Int32(data) => Ok(parse::RawNumericData::UInt64(
                 data.into_iter().map(|x| x as u64).collect(),
             )),
-            parse::NumericData::UInt64(data) => Ok(parse::NumericData::UInt64(data)),
+            parse::RawNumericData::UInt64(data) => Ok(parse::RawNumericData::UInt64(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::Int64 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::Int64(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::Int64(
                 data.into_iter().map(|x| x as i64).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::Int64(
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::Int64(
                 data.into_iter().map(|x| x as i64).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::Int64(
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::Int64(
                 data.into_iter().map(|x| x as i64).collect(),
             )),
-            parse::NumericData::Int32(data) => Ok(parse::NumericData::Int64(
+            parse::RawNumericData::Int32(data) => Ok(parse::RawNumericData::Int64(
                 data.into_iter().map(|x| x as i64).collect(),
             )),
-            parse::NumericData::Int64(data) => Ok(parse::NumericData::Int64(data)),
+            parse::RawNumericData::Int64(data) => Ok(parse::RawNumericData::Int64(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::UInt32 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::UInt32(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::UInt32(
                 data.into_iter().map(|x| x as u32).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::UInt32(
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::UInt32(
                 data.into_iter().map(|x| x as u32).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::UInt32(
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::UInt32(
                 data.into_iter().map(|x| x as u32).collect(),
             )),
-            parse::NumericData::UInt32(data) => Ok(parse::NumericData::UInt32(data)),
+            parse::RawNumericData::UInt32(data) => Ok(parse::RawNumericData::UInt32(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::Int32 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::Int32(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::Int32(
                 data.into_iter().map(|x| x as i32).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::Int32(
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::Int32(
                 data.into_iter().map(|x| x as i32).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::Int32(
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::Int32(
                 data.into_iter().map(|x| x as i32).collect(),
             )),
-            parse::NumericData::Int32(data) => Ok(parse::NumericData::Int32(data)),
+            parse::RawNumericData::Int32(data) => Ok(parse::RawNumericData::Int32(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::UInt16 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::UInt16(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::UInt16(
                 data.into_iter().map(|x| x as u16).collect(),
             )),
-            parse::NumericData::UInt16(data) => Ok(parse::NumericData::UInt16(data)),
+            parse::RawNumericData::UInt16(data) => Ok(parse::RawNumericData::UInt16(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::Int16 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::Int16(
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::Int16(
                 data.into_iter().map(|x| x as i16).collect(),
             )),
-            parse::NumericData::Int16(data) => Ok(parse::NumericData::Int16(data)),
+            parse::RawNumericData::Int16(data) => Ok(parse::RawNumericData::Int16(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::UInt8 => match data {
-            parse::NumericData::UInt8(data) => Ok(parse::NumericData::UInt8(data)),
+            parse::RawNumericData::UInt8(data) => Ok(parse::RawNumericData::UInt8(data)),
             _ => Err(Error::ConversionError),
         },
         parse::ArrayType::Int8 => match data {
-            parse::NumericData::Int8(data) => Ok(parse::NumericData::Int8(data)),
+            parse::RawNumericData::Int8(data) => Ok(parse::RawNumericData::Int8(data)),
             _ => Err(Error::ConversionError),
         },
         _ => Err(Error::ConversionError),
@@ -275,8 +275,8 @@ fn try_convert_number_format(
 impl NumericData {
     fn try_from(
         target_type: parse::ArrayType,
-        real: parse::NumericData,
-        imag: Option<parse::NumericData>,
+        real: parse::RawNumericData,
+        imag: Option<parse::RawNumericData>,
     ) -> Result<Self, Error> {
         let real = try_convert_number_format(target_type, real)?;
         let imag = match imag {
@@ -285,101 +285,101 @@ impl NumericData {
         };
         // The next step should never fail unless there is a bug in the code
         match (real, imag) {
-            (parse::NumericData::Double(real), None) => Ok(NumericData::Double {
+            (parse::RawNumericData::Double(real), None) => Ok(NumericData::Double {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::Double(real), Some(parse::NumericData::Double(imag))) => {
+            (parse::RawNumericData::Double(real), Some(parse::RawNumericData::Double(imag))) => {
                 Ok(NumericData::Double {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::Single(real), None) => Ok(NumericData::Single {
+            (parse::RawNumericData::Single(real), None) => Ok(NumericData::Single {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::Single(real), Some(parse::NumericData::Single(imag))) => {
+            (parse::RawNumericData::Single(real), Some(parse::RawNumericData::Single(imag))) => {
                 Ok(NumericData::Single {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::UInt64(real), None) => Ok(NumericData::UInt64 {
+            (parse::RawNumericData::UInt64(real), None) => Ok(NumericData::UInt64 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::UInt64(real), Some(parse::NumericData::UInt64(imag))) => {
+            (parse::RawNumericData::UInt64(real), Some(parse::RawNumericData::UInt64(imag))) => {
                 Ok(NumericData::UInt64 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::Int64(real), None) => Ok(NumericData::Int64 {
+            (parse::RawNumericData::Int64(real), None) => Ok(NumericData::Int64 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::Int64(real), Some(parse::NumericData::Int64(imag))) => {
+            (parse::RawNumericData::Int64(real), Some(parse::RawNumericData::Int64(imag))) => {
                 Ok(NumericData::Int64 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::UInt32(real), None) => Ok(NumericData::UInt32 {
+            (parse::RawNumericData::UInt32(real), None) => Ok(NumericData::UInt32 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::UInt32(real), Some(parse::NumericData::UInt32(imag))) => {
+            (parse::RawNumericData::UInt32(real), Some(parse::RawNumericData::UInt32(imag))) => {
                 Ok(NumericData::UInt32 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::Int32(real), None) => Ok(NumericData::Int32 {
+            (parse::RawNumericData::Int32(real), None) => Ok(NumericData::Int32 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::Int32(real), Some(parse::NumericData::Int32(imag))) => {
+            (parse::RawNumericData::Int32(real), Some(parse::RawNumericData::Int32(imag))) => {
                 Ok(NumericData::Int32 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::UInt16(real), None) => Ok(NumericData::UInt16 {
+            (parse::RawNumericData::UInt16(real), None) => Ok(NumericData::UInt16 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::UInt16(real), Some(parse::NumericData::UInt16(imag))) => {
+            (parse::RawNumericData::UInt16(real), Some(parse::RawNumericData::UInt16(imag))) => {
                 Ok(NumericData::UInt16 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::Int16(real), None) => Ok(NumericData::Int16 {
+            (parse::RawNumericData::Int16(real), None) => Ok(NumericData::Int16 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::Int16(real), Some(parse::NumericData::Int16(imag))) => {
+            (parse::RawNumericData::Int16(real), Some(parse::RawNumericData::Int16(imag))) => {
                 Ok(NumericData::Int16 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::UInt8(real), None) => Ok(NumericData::UInt8 {
+            (parse::RawNumericData::UInt8(real), None) => Ok(NumericData::UInt8 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::UInt8(real), Some(parse::NumericData::UInt8(imag))) => {
+            (parse::RawNumericData::UInt8(real), Some(parse::RawNumericData::UInt8(imag))) => {
                 Ok(NumericData::UInt8 {
                     real: real,
                     imag: Some(imag),
                 })
             }
-            (parse::NumericData::Int8(real), None) => Ok(NumericData::Int8 {
+            (parse::RawNumericData::Int8(real), None) => Ok(NumericData::Int8 {
                 real: real,
                 imag: None,
             }),
-            (parse::NumericData::Int8(real), Some(parse::NumericData::Int8(imag))) => {
+            (parse::RawNumericData::Int8(real), Some(parse::RawNumericData::Int8(imag))) => {
                 Ok(NumericData::Int8 {
                     real: real,
                     imag: Some(imag),
@@ -427,7 +427,7 @@ impl Array {
     }
 
     /// The size of this array.
-    /// 
+    ///
     /// The number of entries in this vector is equal to the number of
     /// dimensions of this array. Each array has at least two dimensions.
     /// For two-dimensional arrays the first dimension is the number of rows
@@ -442,7 +442,7 @@ impl Array {
     }
 
     /// The actual numerical data stored in this array.
-    /// 
+    ///
     /// ```rust
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// # let file = std::fs::File::open("tests/double.mat")?;
@@ -454,7 +454,7 @@ impl Array {
     /// # Ok(())
     /// # }
     /// ```
-    /// 
+    ///
     /// For a more convenient access to the data, consider using the
     /// `matfile-ndarray` crate.
     pub fn data(&self) -> &NumericData {
@@ -495,7 +495,7 @@ impl MatFile {
     }
 
     /// List of all arrays in this .mat file.
-    /// 
+    ///
     /// When parsing a .mat file all arrays of unsupported type (currently all
     /// non-numerical and sparse arrays) will be ignored and will thus not be
     /// part of this list.
@@ -504,7 +504,7 @@ impl MatFile {
     }
 
     /// Returns an array with the given name if it exists. Case sensitive.
-    /// 
+    ///
     /// When parsing a .mat file all arrays of unsupported type (currently all
     /// non-numerical and sparse arrays) will be ignored and will thus not be
     /// returned by this function.
