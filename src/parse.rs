@@ -194,7 +194,7 @@ pub enum DataType {
 }
 
 // impl DataType {
-//     pub fn byte_size(&self) -> Option<usize> {
+//     fn byte_size(&self) -> Option<usize> {
 //         match self {
 //             DataType::Int8 | DataType::UInt8 | DataType::Utf8 => Some(1),
 //             DataType::Int16 | DataType::UInt16 | DataType::Utf16 => Some(2),
@@ -225,7 +225,7 @@ pub enum ArrayType {
 }
 
 impl ArrayType {
-    // pub fn is_numeric(&self) -> bool {
+    // fn is_numeric(&self) -> bool {
     //     match self {
     //         ArrayType::Cell
     //         | ArrayType::Struct
@@ -257,15 +257,12 @@ pub type Dimensions = Vec<i32>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct DataElementTag {
-    pub data_type: DataType,
-    pub data_byte_size: u32,
-    pub padding_byte_size: u32,
+    data_type: DataType,
+    data_byte_size: u32,
+    padding_byte_size: u32,
 }
 
-pub fn parse_data_element_tag(
-    i: &[u8],
-    endianness: nom::Endianness,
-) -> IResult<&[u8], DataElementTag> {
+fn parse_data_element_tag(i: &[u8], endianness: nom::Endianness) -> IResult<&[u8], DataElementTag> {
     switch!(
         i,
         map!(peek!(u32!(endianness)), |b| b & 0xFFFF0000),
@@ -299,10 +296,7 @@ pub fn parse_data_element_tag(
     )
 }
 
-pub fn parse_array_name_subelement(
-    i: &[u8],
-    endianness: nom::Endianness,
-) -> IResult<&[u8], String> {
+fn parse_array_name_subelement(i: &[u8], endianness: nom::Endianness) -> IResult<&[u8], String> {
     do_parse!(
         i,
         data_element_tag: apply!(parse_data_element_tag, endianness)
@@ -323,7 +317,7 @@ pub fn parse_array_name_subelement(
     )
 }
 
-pub fn parse_dimensions_array_subelement(
+fn parse_dimensions_array_subelement(
     i: &[u8],
     endianness: nom::Endianness,
 ) -> IResult<&[u8], Dimensions> {
@@ -347,7 +341,7 @@ pub fn parse_dimensions_array_subelement(
     )
 }
 
-pub fn parse_array_flags_subelement(
+fn parse_array_flags_subelement(
     i: &[u8],
     endianness: nom::Endianness,
 ) -> IResult<&[u8], ArrayFlags> {
