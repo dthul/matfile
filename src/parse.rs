@@ -3,7 +3,7 @@ use nom::{
     alt, apply, be_f32, be_f64, be_i16, be_i32, be_i64, be_i8, be_u16, be_u32, be_u64, be_u8, char,
     complete, cond, count, count_fixed, do_parse, error_position, i32, le_f32, le_f64, le_i16,
     le_i32, le_i64, le_i8, le_u16, le_u32, le_u64, le_u8, length_value, many0, map, map_res, not,
-    opt, pair, peek, return_error, switch, tag, take, u16, u32, value, IResult,
+    opt, pair, peek, switch, tag, take, u16, u32, value, IResult,
 };
 use num_traits::FromPrimitive;
 use std::io::Read;
@@ -17,7 +17,7 @@ pub struct Header {
     is_little_endian: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum NumericData {
     Int8(Vec<i8>),
     UInt8(Vec<u8>),
@@ -706,13 +706,48 @@ mod test {
     fn sparse1() {
         let data = include_bytes!("../tests/sparse1.mat");
 
-        let parse = parse_all(data).unwrap();
-        dbg!(parse);
+        let (_, parsed_data) = parse_all(data).unwrap();
+        let parsed_matrix_data = parsed_data.data_elements[0].clone();
+        if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =
+            parsed_matrix_data
+        {
+            assert_eq!(dim, vec![8, 8]);
+            assert_eq!(irows, vec![5, 7, 2, 0, 1, 3, 6]);
+            assert_eq!(icols, vec![0, 1, 2, 2, 3, 4, 5, 6, 7]);
+            assert_eq!(
+                real_vals,
+                NumericData::Double(vec![2.0, 7.0, 4.0, 9.0, 5.0, 8.0, 6.0])
+            );
+            assert_eq!(imag_vals, None);
+        } else {
+            panic!("Error extracting DataElement::SparseMatrix");
+        }
     }
 
     #[test]
     fn sparse2() {
         let data = include_bytes!("../tests/sparse2.mat");
-        let matrix = parse_all(data);
+
+        let (_, parsed_data) = parse_all(data).unwrap();
+        let parsed_matrix_data = parsed_data.data_elements[0].clone();
+        if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =
+            parsed_matrix_data
+        {
+            assert_eq!(dim, vec![8, 8]);
+            assert_eq!(irows, vec![5, 7, 2, 0, 1, 5, 3, 6]);
+            assert_eq!(icols, vec![0, 1, 2, 2, 3, 4, 6, 7, 8]);
+            assert_eq!(
+                real_vals,
+                NumericData::Double(vec![2.0, 7.0, 4.0, 9.0, 5.0, 6.0, 8.0, 6.0])
+            );
+            assert_eq!(
+                imag_vals,
+                Some(NumericData::Double(vec![
+                    4.0, 0.0, 3.0, 7.0, 0.0, 1.0, 0.0, 0.0
+                ]))
+            );
+        } else {
+            panic!("Error extracting DataElement::SparseMatrix");
+        }
     }
 }
