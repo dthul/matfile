@@ -225,16 +225,16 @@ pub enum ArrayType {
 }
 
 impl ArrayType {
-    pub fn is_numeric(&self) -> bool {
-        match self {
-            ArrayType::Cell
-            | ArrayType::Struct
-            | ArrayType::Object
-            | ArrayType::Char
-            | ArrayType::Sparse => false,
-            _ => true,
-        }
-    }
+    // pub fn is_numeric(&self) -> bool {
+    //     match self {
+    //         ArrayType::Cell
+    //         | ArrayType::Struct
+    //         | ArrayType::Object
+    //         | ArrayType::Char
+    //         | ArrayType::Sparse => false,
+    //         _ => true,
+    //     }
+    // }
 
     fn numeric_data_type(&self) -> Option<DataType> {
         match self {
@@ -536,14 +536,14 @@ fn parse_numeric_matrix_subelements(
     do_parse!(
         i,
         dimensions: apply!(parse_dimensions_array_subelement, endianness)
-            >> name: apply!(parse_array_name_subelement, endianness) 
+            >> name: apply!(parse_array_name_subelement, endianness)
 
             >> real_part: apply!(parse_numeric_subelement, endianness)
             // Check that size and type of the real part are correct
             >> n_required_elements: value!(dimensions.iter().product::<i32>())
             >> array_data_type: value!(flags.class.numeric_data_type().unwrap())
             >> apply!(assert, real_part.len() == n_required_elements as usize && numeric_data_types_are_compatible(array_data_type, real_part.data_type()))
-    
+
             >> imag_part: cond!(flags.complex, apply!(parse_numeric_subelement, endianness))
             // Check that size and type of imaginary part are correct if present
             >> apply!(assert,
@@ -553,8 +553,7 @@ fn parse_numeric_matrix_subelements(
                     true
                 }
             )
-            
-            
+
             >> (DataElement::NumericMatrix(
                 flags, dimensions, name, real_part, imag_part
             ))
@@ -577,7 +576,7 @@ fn parse_sparse_matrix_subelements(
             >> real_part: apply!(parse_numeric_subelement, endianness)
             // Check that size of the real part is correct (can't check for type in sparse matrices)
             >> apply!(assert, real_part.len() == flags.nzmax)
-    
+
             >> imag_part: cond!(flags.complex, apply!(parse_numeric_subelement, endianness))
             // Check that size of the imaginary part is correct if present (can't check for type in sparse matrices)
             >> apply!(assert,
@@ -706,7 +705,7 @@ mod test {
     #[test]
     fn sparse1() {
         let data = include_bytes!("../tests/sparse1.mat");
-    
+
         let (_, parsed_data) = parse_all(data).unwrap();
         let parsed_matrix_data = parsed_data.data_elements[0].clone();
         if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =

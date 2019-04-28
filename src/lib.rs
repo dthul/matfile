@@ -536,22 +536,12 @@ mod tests {
     fn double_as_int16_array() {
         let data = include_bytes!("../tests/double_as_int16.mat");
         let _mat_file = MatFile::parse(data.as_ref()).unwrap();
-        // let name = "S"
-        // let class = double
-        // let dimension = 1*3
-        // let numeric_data : Vec<i16> = vec![-1.0,0.0,3.0]
     }
 
     #[test]
     fn double_as_uint8_array() {
         let data = include_bytes!("../tests/double_as_uint8.mat");
         let _mat_file = MatFile::parse(data.as_ref()).unwrap();
-        dbg!(_mat_file);
-        // let name = "D";
-        // let class = double;
-        // let dimension : Vec<usize> = vec![2,2];
-        // let real_part : Vec<f64> = vec![1.0,2.0;3.0,4.0];
-        // let imag_part : Option<Vec<f64>> = None;
     }
 
     #[test]
