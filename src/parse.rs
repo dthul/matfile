@@ -17,7 +17,7 @@ pub struct Header {
     is_little_endian: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum NumericData {
     Int8(Vec<i8>),
     UInt8(Vec<u8>),
@@ -72,6 +72,19 @@ pub enum DataElement {
         NumericData,
         Option<NumericData>,
     ),
+    SparseMatrix(
+        ArrayFlags,
+        Dimensions,
+        String,
+        RowIndex,
+        ColumnShift,
+        NumericData,
+        Option<NumericData>,
+    ),
+    // CharacterMatrix,
+    // Cell Matrix,
+    // Structure Matrix,
+    // Object Matrix,
     Unsupported,
 }
 
@@ -158,6 +171,7 @@ pub struct ArrayFlags {
     pub global: bool,
     pub logical: bool,
     pub class: ArrayType,
+    pub nzmax: usize,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, Primitive)]
@@ -211,16 +225,16 @@ pub enum ArrayType {
 }
 
 impl ArrayType {
-    fn is_numeric(&self) -> bool {
-        match self {
-            ArrayType::Cell
-            | ArrayType::Struct
-            | ArrayType::Object
-            | ArrayType::Char
-            | ArrayType::Sparse => false,
-            _ => true,
-        }
-    }
+    // fn is_numeric(&self) -> bool {
+    //     match self {
+    //         ArrayType::Cell
+    //         | ArrayType::Struct
+    //         | ArrayType::Object
+    //         | ArrayType::Char
+    //         | ArrayType::Sparse => false,
+    //         _ => true,
+    //     }
+    // }
 
     fn numeric_data_type(&self) -> Option<DataType> {
         match self {
@@ -340,7 +354,7 @@ fn parse_array_flags_subelement(
                 tag_data_type == DataType::UInt32 as u32 && tag_data_len == 8
             )
             >> flags_and_class: u32!(endianness)
-            >> take!(4)
+            >> nzmax: u32!(endianness)
             >> (ArrayFlags {
                 complex: (flags_and_class & 0x0800) != 0,
                 global: (flags_and_class & 0x0400) != 0,
@@ -348,52 +362,25 @@ fn parse_array_flags_subelement(
                 class: ArrayType::from_u8((flags_and_class & 0xFF) as u8).ok_or(
                     nom::Err::Failure(nom::Context::Code(i, nom::ErrorKind::Custom(44),))
                 )?,
+                nzmax: nzmax as usize,
             })
     )
 }
 
 fn parse_matrix_data_element(i: &[u8], endianness: nom::Endianness) -> IResult<&[u8], DataElement> {
-    // Figure out the type of array
     do_parse!(
         i,
         flags: apply!(parse_array_flags_subelement, endianness)
-            >> dimensions: apply!(parse_dimensions_array_subelement, endianness)
-            >> name: apply!(parse_array_name_subelement, endianness)
             >> data_element:
-                switch!(
-                    value!(flags.class.is_numeric()),
-                    true => apply!(parse_numeric_matrix_data_element, flags, dimensions, name, endianness)
+                switch!(value!(flags.class),
+                     ArrayType::Cell => apply!(parse_unsupported_data_element, endianness)
+                    | ArrayType::Struct => apply!(parse_unsupported_data_element, endianness)
+                    | ArrayType::Object => apply!(parse_unsupported_data_element, endianness)
+                    | ArrayType::Char => apply!(parse_unsupported_data_element, endianness)
+                    | ArrayType::Sparse => apply!(parse_sparse_matrix_subelements, endianness, flags)
+                    | _ => apply!(parse_numeric_matrix_subelements, endianness, flags)
                 )
             >> (data_element)
-    )
-}
-
-fn parse_numeric_matrix_data_element(
-    i: &[u8],
-    flags: ArrayFlags,
-    dimensions: Vec<i32>,
-    name: String,
-    endianness: nom::Endianness,
-) -> IResult<&[u8], DataElement> {
-    do_parse!(
-        i,
-        num_required_elements: value!(dimensions.iter().product::<i32>())
-            >> array_data_type: value!(flags.class.numeric_data_type().unwrap())
-            // Load the real part of the matrix
-            >> real: apply!(parse_numeric_subelement, endianness)
-            // Check that the size and type of the real part are correct
-            >> apply!(assert, real.len() == num_required_elements as usize && numeric_data_types_are_compatible(array_data_type, real.data_type()))
-            // Optionally load the imaginary part of the matrix
-            >> imag: cond!(flags.complex, apply!(parse_numeric_subelement, endianness))
-            // Check that the size and type of the imaginary part are correct (if present)
-            >> apply!(assert,
-                if let Some(imag) = &imag {
-                    imag.len() == num_required_elements as usize && numeric_data_types_are_compatible(array_data_type, imag.data_type())
-                } else {
-                    true
-                }
-            )
-            >> (DataElement::NumericMatrix(flags, dimensions, name, real, imag))
     )
 }
 
@@ -532,6 +519,124 @@ fn parse_compressed_data_element(
     Ok((&[], data_element))
 }
 
+pub type RowIndex = Vec<usize>;
+pub type ColumnShift = Vec<usize>;
+
+fn parse_numeric_matrix_subelements(
+    i: &[u8],
+    endianness: nom::Endianness,
+    flags: ArrayFlags,
+) -> IResult<&[u8], DataElement> {
+    do_parse!(
+        i,
+        dimensions: apply!(parse_dimensions_array_subelement, endianness)
+            >> name: apply!(parse_array_name_subelement, endianness)
+
+            >> real_part: apply!(parse_numeric_subelement, endianness)
+            // Check that size and type of the real part are correct
+            >> n_required_elements: value!(dimensions.iter().product::<i32>())
+            >> array_data_type: value!(flags.class.numeric_data_type().unwrap())
+            >> apply!(assert, real_part.len() == n_required_elements as usize && numeric_data_types_are_compatible(array_data_type, real_part.data_type()))
+
+            >> imag_part: cond!(flags.complex, apply!(parse_numeric_subelement, endianness))
+            // Check that size and type of imaginary part are correct if present
+            >> apply!(assert,
+                if let Some(imag_part) = &imag_part {
+                    imag_part.len() == n_required_elements as usize && numeric_data_types_are_compatible(array_data_type, imag_part.data_type())
+                } else {
+                    true
+                }
+            )
+
+            >> (DataElement::NumericMatrix(
+                flags, dimensions, name, real_part, imag_part
+            ))
+    )
+}
+
+fn parse_sparse_matrix_subelements(
+    i: &[u8],
+    endianness: nom::Endianness,
+    flags: ArrayFlags,
+) -> IResult<&[u8], DataElement> {
+    // Figure out the type of array
+    do_parse!(
+        i,
+        dimensions: apply!(parse_dimensions_array_subelement, endianness)
+            >> name: apply!(parse_array_name_subelement, endianness)
+            >> row_index: apply!(parse_row_index_array_subelement, endianness)
+            >> column_index: apply!(parse_column_index_array_subelement, endianness)
+
+            >> real_part: apply!(parse_numeric_subelement, endianness)
+            // Check that size of the real part is correct (can't check for type in sparse matrices)
+            >> apply!(assert, real_part.len() == flags.nzmax)
+
+            >> imag_part: cond!(flags.complex, apply!(parse_numeric_subelement, endianness))
+            // Check that size of the imaginary part is correct if present (can't check for type in sparse matrices)
+            >> apply!(assert,
+                if let Some(imag_part) = &imag_part {
+                    imag_part.len() == flags.nzmax as usize
+                } else {
+                    true
+                }
+            )
+
+            >> (DataElement::SparseMatrix(
+                flags,
+                dimensions,
+                name,
+                row_index.iter().map(|&i| i as usize).collect(),
+                column_index.iter().map(|&i| i as usize).collect(),
+                real_part,
+                imag_part
+            ))
+    )
+}
+
+fn parse_row_index_array_subelement(
+    i: &[u8],
+    endianness: nom::Endianness,
+) -> IResult<&[u8], RowIndex> {
+    do_parse!(
+        i,
+        data_element_tag: apply!(parse_data_element_tag, endianness)
+            >> apply!(
+                assert,
+                data_element_tag.data_type == DataType::Int32
+                    && data_element_tag.data_byte_size > 0
+            )
+            >> row_index:
+                count!(
+                    i32!(endianness),
+                    (data_element_tag.data_byte_size / 4) as usize
+                )
+            >> take!(data_element_tag.padding_byte_size)
+            >> (row_index.iter().map(|&i| i as usize).collect())
+    )
+}
+
+fn parse_column_index_array_subelement(
+    i: &[u8],
+    endianness: nom::Endianness,
+) -> IResult<&[u8], ColumnShift> {
+    do_parse!(
+        i,
+        data_element_tag: apply!(parse_data_element_tag, endianness)
+            >> apply!(
+                assert,
+                data_element_tag.data_type == DataType::Int32
+                    && data_element_tag.data_byte_size > 0
+            )
+            >> column_index:
+                count!(
+                    i32!(endianness),
+                    (data_element_tag.data_byte_size / 4) as usize
+                )
+            >> take!(data_element_tag.padding_byte_size)
+            >> (column_index.iter().map(|&i| i as usize).collect())
+    )
+}
+
 fn replace_context_slice<'old, 'new, E>(
     context: nom::Context<&'old [u8], E>,
     new_slice: &'new [u8],
@@ -564,6 +669,7 @@ fn parse_unsupported_data_element(
     Ok((&[], DataElement::Unsupported))
 }
 
+#[derive(Debug)]
 pub struct ParseResult {
     pub header: Header,
     pub data_elements: Vec<DataElement>,
@@ -584,4 +690,58 @@ pub fn parse_all(i: &[u8]) -> IResult<&[u8], ParseResult> {
                 data_elements: data_elements,
             })
     )
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn sparse1() {
+        let data = include_bytes!("../tests/sparse1.mat");
+
+        let (_, parsed_data) = parse_all(data).unwrap();
+        let parsed_matrix_data = parsed_data.data_elements[0].clone();
+        if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =
+            parsed_matrix_data
+        {
+            assert_eq!(dim, vec![8, 8]);
+            assert_eq!(irows, vec![5, 7, 2, 0, 1, 3, 6]);
+            assert_eq!(icols, vec![0, 1, 2, 2, 3, 4, 5, 6, 7]);
+            assert_eq!(
+                real_vals,
+                NumericData::Double(vec![2.0, 7.0, 4.0, 9.0, 5.0, 8.0, 6.0])
+            );
+            assert_eq!(imag_vals, None);
+        } else {
+            panic!("Error extracting DataElement::SparseMatrix");
+        }
+    }
+
+    #[test]
+    fn sparse2() {
+        let data = include_bytes!("../tests/sparse2.mat");
+
+        let (_, parsed_data) = parse_all(data).unwrap();
+        let parsed_matrix_data = parsed_data.data_elements[0].clone();
+        if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =
+            parsed_matrix_data
+        {
+            assert_eq!(dim, vec![8, 8]);
+            assert_eq!(irows, vec![5, 7, 2, 0, 1, 5, 3, 6]);
+            assert_eq!(icols, vec![0, 1, 2, 2, 3, 4, 6, 7, 8]);
+            assert_eq!(
+                real_vals,
+                NumericData::Double(vec![2.0, 7.0, 4.0, 9.0, 5.0, 6.0, 8.0, 6.0])
+            );
+            assert_eq!(
+                imag_vals,
+                Some(NumericData::Double(vec![
+                    4.0, 0.0, 3.0, 7.0, 0.0, 1.0, 0.0, 0.0
+                ]))
+            );
+        } else {
+            panic!("Error extracting DataElement::SparseMatrix");
+        }
+    }
 }

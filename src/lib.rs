@@ -1,13 +1,13 @@
 #![doc(html_root_url = "https://docs.rs/matfile/0.2.0")]
 
 //! Matfile is a library for reading (and in the future writing) Matlab ".mat" files.
-//! 
+//!
 //! __Please note__: This library is still alpha quality software and only implements a subset of the features supported by .mat files.
-//! 
+//!
 //! ## Feature Status
-//! 
+//!
 //! Matfile currently allows you to load numeric arrays from .mat files (all floating point and integer types, including complex numbers). All other types are currently ignored.
-//! 
+//!
 //! * [ ] Loading .mat files
 //!   * [x] Numeric arrays
 //!   * [ ] Cell arrays
@@ -16,11 +16,11 @@
 //!   * [ ] Character arrays
 //!   * [ ] Sparse arrays
 //! * [ ] Writing .mat files
-//! 
+//!
 //! ## Examples
-//! 
+//!
 //! Loading a .mat file from disk and accessing one of its arrays by name:
-//! 
+//!
 //! ```rust
 //! # pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let file = std::fs::File::open("tests/double.mat")?;
@@ -61,7 +61,7 @@ extern crate enum_primitive_derive;
 mod parse;
 
 /// MatFile is a collection of named arrays.
-/// 
+///
 /// You can load a ".mat" file from disk like this:
 /// ```rust
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +76,7 @@ pub struct MatFile {
 }
 
 /// A numeric array (the only type supported at the moment).
-/// 
+///
 /// You can access the arrays of a MatFile either by name or by iterating
 /// through all of them:
 /// ```rust
@@ -86,7 +86,7 @@ pub struct MatFile {
 /// if let Some(array_a) = mat_file.find_by_name("A") {
 ///     println!("Array \"A\": {:#?}", array_a);
 /// }
-/// 
+///
 /// for array in mat_file.arrays() {
 ///     println!("Found array named {} of size {:?}", array.name(), array.size());
 /// }
@@ -103,7 +103,7 @@ pub struct Array {
 /// Stores the data of a numerical array and abstracts over the actual data
 /// type used. Real and imaginary parts are stored in separate vectors with the
 /// imaginary part being optional.
-/// 
+///
 /// Numerical data is stored in column-major order. When talking about higher
 /// dimensional arrays this means that the index of the first dimension varies
 /// fastest.
@@ -427,7 +427,7 @@ impl Array {
     }
 
     /// The size of this array.
-    /// 
+    ///
     /// The number of entries in this vector is equal to the number of
     /// dimensions of this array. Each array has at least two dimensions.
     /// For two-dimensional arrays the first dimension is the number of rows
@@ -442,7 +442,7 @@ impl Array {
     }
 
     /// The actual numerical data stored in this array.
-    /// 
+    ///
     /// ```rust
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// # let file = std::fs::File::open("tests/double.mat")?;
@@ -454,7 +454,7 @@ impl Array {
     /// # Ok(())
     /// # }
     /// ```
-    /// 
+    ///
     /// For a more convenient access to the data, consider using the
     /// `matfile-ndarray` crate.
     pub fn data(&self) -> &NumericData {
@@ -495,7 +495,7 @@ impl MatFile {
     }
 
     /// List of all arrays in this .mat file.
-    /// 
+    ///
     /// When parsing a .mat file all arrays of unsupported type (currently all
     /// non-numerical and sparse arrays) will be ignored and will thus not be
     /// part of this list.
@@ -504,7 +504,7 @@ impl MatFile {
     }
 
     /// Returns an array with the given name if it exists. Case sensitive.
-    /// 
+    ///
     /// When parsing a .mat file all arrays of unsupported type (currently all
     /// non-numerical and sparse arrays) will be ignored and will thus not be
     /// returned by this function.
