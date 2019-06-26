@@ -393,7 +393,7 @@ impl NumericData {
 #[derive(Debug)]
 pub enum Error {
     IOError(std::io::Error),
-    ParseError(nom::Err<&'static [u8], u32>),
+    ParseError(nom::Err<(&'static [u8], nom::error::ErrorKind)>),
     ConversionError,
     InternalError,
 }

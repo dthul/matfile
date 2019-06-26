@@ -15,11 +15,8 @@ repository = "https://github.com/dthul/matfile"
 [dependencies]
 enum-primitive-derive = "^0.1"
 libflate = "0.1"
+nom = "5"
 num-traits = "0.2"
-
-[dependencies.nom]
-version = "^4.2"
-features = ["verbose-errors"]
 
 [workspace]
 members = ["matfile-ndarray"]
