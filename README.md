@@ -3,6 +3,7 @@
 [![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Build Status](https://api.travis-ci.com/dthul/matfile.svg?branch=master)](https://travis-ci.com/dthul/matfile)
 [![Crates.io Version](https://img.shields.io/crates/v/matfile.svg)](https://crates.io/crates/matfile)
+[![Dependency Status](https://deps.rs/repo/github/dthul/matfile/status.svg)](https://deps.rs/repo/github/dthul/matfile)
 
 Matfile is a library for reading (and in the future writing) Matlab ".mat" files.
 
