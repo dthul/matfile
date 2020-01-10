@@ -6,7 +6,12 @@ use nom::number::complete::{
 use nom::{
     alt, call, char, complete, cond, count, do_parse, error_position, i32, length_value, many0,
     map, map_res, not, opt, pair, peek, switch, tag, take, u16, u32, value, IResult,
+    try_parse,
 };
+use nom::combinator::{peek, map, map_parser, map_res, verify, value};
+use nom::bytes::complete::{take, is_not, tag};
+use nom::sequence::pair;
+use nom::branch::alt;
 use num_traits::FromPrimitive;
 use std::io::Read;
 
@@ -115,24 +120,56 @@ fn assert(i: &[u8], v: bool) -> IResult<&[u8], ()> {
 }
 
 pub fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
-    do_parse!(
-        i,
-        // Make sure that the first four bytes are not null.
-        peek!(count!(pair!(not!(char!('\0')), take!(1)), 4)) >>
-        text: take!(116) >> // text field
-        _ssdo: take!(8) >> // subsystem data offset
-        // Assume little endian for now
-        version: u16!(nom::number::Endianness::Little) >>
-        // Check the endianness
-        is_little_endian: alt!(value!(true, tag!("IM")) | value!(false, tag!("MI"))) >>
-        // Fix endianness of the version field if we assumed the wrong one
-        version: value!(if is_little_endian { version } else { version.swap_bytes() }) >>
-        call!(assert, version == 0x0100) >>
-        (Header {
-            text: std::str::from_utf8(text).unwrap_or(&"").to_owned(),
-            is_little_endian: is_little_endian,
-        })
-    )
+		// Make sure first 4 bytes are not null, but do not consume those bytes.
+    let (i, _) = try_parse!(i, peek(map_parser(take(4usize), is_not("\0"))));
+    
+    // Consume 116 byte text field, which starts at beginning of file.
+    // The text should be valid utf8.
+    let (i, text) = try_parse!(i, map_res(take(116usize), std::str::from_utf8));
+    
+    // Consume 8 byte subsystem data offset, but we don't use it for anything.
+    let (i, _ssdo) = try_parse!(i, take(8usize)); 
+    
+    // The next 4 bytes are a u16 version and then either "IM" or "MI".
+    // If we get "IM" then the file was written on a little endian machine.
+    // If it's "MI" then the file was written on a big endian machine.
+    // If the file was written on a machine with different endianness than the
+    // one we are running on now then we must swap the bytes in the u16 version.
+    // The version should be equal to 0x0100.
+    let (i, (_version, is_little_endian)) = try_parse!(i, verify(map(
+        // Extract the version and IM/MI tag.
+        // If the tag is "IM" then file was written on a little endian machine.
+        pair(le_u16, alt((value(true, tag("IM")), value(false, tag("MI"))))),
+        | (version, is_little_endian) | {
+        		// If we are big endian and the file is little endian then swap bytes.
+            #[cfg(target_endian = "big")]
+            {
+                if is_little_endian {
+                    (version.swap_bytes(), true)
+                }
+                else {
+                    (version, false)
+                }
+            }
+            // If we are little endian and the file is big endian then swap bytes.
+            #[cfg(target_endian = "little")]
+            {
+                if is_little_endian {
+                    (version, true)
+                }
+                else {
+                    (version.swap_bytes(), false)
+                }
+            }
+        }),
+        // Verify the version (after byte swapping) is equal to 0x0100.
+        | (version, _) | version == &0x0100 ));
+    
+    // Return the remaining input `i` and the header.    
+    Ok((i, Header {
+        text: text.into(),
+        is_little_endian: is_little_endian,
+    }))
 }
 
 fn parse_next_data_element(
