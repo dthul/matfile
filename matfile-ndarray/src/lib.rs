@@ -1,21 +1,21 @@
 #![doc(html_root_url = "https://docs.rs/matfile-ndarray/0.1.0")]
 
 //! Helpers for converting between `matfile::Array` and `ndarray::Array`.
-//! 
+//!
 //! While `matfile` arrays abstract over the underlying data type, `ndarray`
 //! arrays are parameterized by a concrete data type. Thus the conversions
 //! provided are fallible in case the data types are not compatible.
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! First, bring the `TryInto` trait into scope:
-//! 
+//!
 //! ```rust
 //! use matfile_ndarray::TryInto;
 //! ```
-//! 
+//!
 //! ## Dynamically dimensioned arrays
-//! 
+//!
 //! Converting a `matfile` array `mf_arr` to a dynamic dimension `ndarray` array
 //! `nd_arr`:
 //! ```rust
@@ -29,9 +29,9 @@
 //! #     Ok(())
 //! # }
 //! ```
-//! 
+//!
 //! ## Statically dimensioned arrays
-//! 
+//!
 //! Converting a `matfile` array `mf_arr` to a static dimension `ndarray` array
 //! `nd_arr`:
 //! ```rust
@@ -91,7 +91,10 @@ macro_rules! dynamic_conversions {
             type Error = Error;
             fn try_into(self) -> Result<nd::ArrayViewD<'me, $num>, Self::Error> {
                 match self.data() {
-                    mf::NumericData::$variant { ref real, imag: None } => {
+                    mf::NumericData::$variant {
+                        ref real,
+                        imag: None,
+                    } => {
                         let dimension: nd::IxDyn = self.size().clone().into_dimension();
                         nd::ArrayView::from_shape(dimension.set_f(true), real)
                             .map_err(|_err| Error::ShapeError)
@@ -105,7 +108,10 @@ macro_rules! dynamic_conversions {
             type Error = Error;
             fn try_into(self) -> Result<nd::ArrayD<$num>, Self::Error> {
                 match self.data() {
-                    mf::NumericData::$variant { ref real, imag: None } => {
+                    mf::NumericData::$variant {
+                        ref real,
+                        imag: None,
+                    } => {
                         let dimension: nd::IxDyn = self.size().clone().into_dimension();
                         nd::Array::from_shape_vec(dimension.set_f(true), real.clone())
                             .map_err(|_err| Error::ShapeError)
@@ -119,9 +125,16 @@ macro_rules! dynamic_conversions {
             type Error = Error;
             fn try_into(self) -> Result<nd::ArrayD<Complex<$num>>, Self::Error> {
                 match self.data() {
-                    mf::NumericData::$variant { ref real, imag: Some(ref imag) } => {
+                    mf::NumericData::$variant {
+                        ref real,
+                        imag: Some(ref imag),
+                    } => {
                         let dimension: nd::IxDyn = self.size().clone().into_dimension();
-                        let values = real.iter().zip(imag.iter()).map(|(&re, &im)| Complex::new(re, im)).collect();
+                        let values = real
+                            .iter()
+                            .zip(imag.iter())
+                            .map(|(&re, &im)| Complex::new(re, im))
+                            .collect();
                         nd::Array::from_shape_vec(dimension.set_f(true), values)
                             .map_err(|_err| Error::ShapeError)
                     }
@@ -136,7 +149,9 @@ macro_rules! static_conversions_n {
     ( $num:ty, $variant:ident, $ndims:literal ) => {
         impl<'me> TryInto<nd::ArrayView<'me, $num, nd::Dim<[nd::Ix; $ndims]>>> for &'me mf::Array {
             type Error = Error;
-            fn try_into(self) -> Result<nd::ArrayView<'me, $num, nd::Dim<[nd::Ix; $ndims]>>, Self::Error> {
+            fn try_into(
+                self,
+            ) -> Result<nd::ArrayView<'me, $num, nd::Dim<[nd::Ix; $ndims]>>, Self::Error> {
                 let size = self.size();
                 if size.len() != $ndims {
                     return Err(Error::ShapeError);
@@ -144,7 +159,10 @@ macro_rules! static_conversions_n {
                 let mut shape = [0; $ndims];
                 shape.copy_from_slice(size);
                 match self.data() {
-                    mf::NumericData::$variant { ref real, imag: None } => {
+                    mf::NumericData::$variant {
+                        ref real,
+                        imag: None,
+                    } => {
                         let dimension: nd::Dim<[nd::Ix; $ndims]> = shape.into_dimension();
                         nd::ArrayView::from_shape(dimension.set_f(true), real)
                             .map_err(|_err| Error::ShapeError)
@@ -153,7 +171,7 @@ macro_rules! static_conversions_n {
                 }
             }
         }
-        
+
         impl TryInto<nd::Array<$num, nd::Dim<[nd::Ix; $ndims]>>> for &mf::Array {
             type Error = Error;
             fn try_into(self) -> Result<nd::Array<$num, nd::Dim<[nd::Ix; $ndims]>>, Self::Error> {
@@ -164,7 +182,10 @@ macro_rules! static_conversions_n {
                 let mut shape = [0; $ndims];
                 shape.copy_from_slice(size);
                 match self.data() {
-                    mf::NumericData::$variant { ref real, imag: None } => {
+                    mf::NumericData::$variant {
+                        ref real,
+                        imag: None,
+                    } => {
                         let dimension: nd::Dim<[nd::Ix; $ndims]> = shape.into_dimension();
                         nd::Array::from_shape_vec(dimension.set_f(true), real.clone())
                             .map_err(|_err| Error::ShapeError)
@@ -173,10 +194,12 @@ macro_rules! static_conversions_n {
                 }
             }
         }
-        
+
         impl TryInto<nd::Array<Complex<$num>, nd::Dim<[nd::Ix; $ndims]>>> for &mf::Array {
             type Error = Error;
-            fn try_into(self) -> Result<nd::Array<Complex<$num>, nd::Dim<[nd::Ix; $ndims]>>, Self::Error> {
+            fn try_into(
+                self,
+            ) -> Result<nd::Array<Complex<$num>, nd::Dim<[nd::Ix; $ndims]>>, Self::Error> {
                 let size = self.size();
                 if size.len() != $ndims {
                     return Err(Error::ShapeError);
@@ -184,9 +207,16 @@ macro_rules! static_conversions_n {
                 let mut shape = [0; $ndims];
                 shape.copy_from_slice(size);
                 match self.data() {
-                    mf::NumericData::$variant { ref real, imag: Some(ref imag) } => {
+                    mf::NumericData::$variant {
+                        ref real,
+                        imag: Some(ref imag),
+                    } => {
                         let dimension: nd::Dim<[nd::Ix; $ndims]> = shape.into_dimension();
-                        let values = real.iter().zip(imag.iter()).map(|(&re, &im)| Complex::new(re, im)).collect();
+                        let values = real
+                            .iter()
+                            .zip(imag.iter())
+                            .map(|(&re, &im)| Complex::new(re, im))
+                            .collect();
                         nd::Array::from_shape_vec(dimension.set_f(true), values)
                             .map_err(|_err| Error::ShapeError)
                     }
