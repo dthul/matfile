@@ -1,4 +1,5 @@
 use libflate::zlib::Decoder;
+use nom::number::Endianness;
 use nom::number::complete::{
     be_f32, be_f64, be_i16, be_i32, be_i64, be_i8, be_u16, be_u32, be_u64, be_u8, le_f32, le_f64,
     le_i16, le_i32, le_i64, le_i8, le_u16, le_u32, le_u64, le_u8,
@@ -18,10 +19,49 @@ use std::io::Read;
 // https://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 // https://www.mathworks.com/help/matlab/import_export/mat-file-versions.html
 
+trait SwapBytes {
+    /// Convert a value from some endianness to the endianness of the machine
+    /// your program is running on.  For example, if running on a little endian
+    /// machine than:
+    /// 
+    /// ```ignore
+    /// # use nom::number::Endianness;
+    /// // test value
+    /// let val: u16 = 0x1100;
+    /// // converting from little endian to little endian, do nothing
+    /// let val = val.swap_bytes_from(Endianness::Little);
+    /// assert_eq!(val, 0x1100);
+    /// // converting from big endian to little endian, swaps bytes
+    /// let val = val.swap_butes_from(Endianness::Big);
+    /// assert_eq!(val, 0x0011);
+    /// ```
+    fn swap_bytes_from(self, from_endian: Endianness) -> Self;
+}
+
+impl SwapBytes for u16 {
+    fn swap_bytes_from(self, from_endian: Endianness) -> Self {
+        #[cfg(target_endian = "big")]
+        {
+            match from_endian {
+                Endianness::Little => self.swap_bytes(),
+                Endianness::Big => self
+            }
+        }
+        // If we are little endian and the file is big endian then swap bytes.
+        #[cfg(target_endian = "little")]
+        {
+            match from_endian {
+                Endianness::Little => self,
+                Endianness::Big => self.swap_bytes()
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     text: String,
-    is_little_endian: bool,
+    endian: Endianness,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -136,39 +176,25 @@ pub fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
     // If the file was written on a machine with different endianness than the
     // one we are running on now then we must swap the bytes in the u16 version.
     // The version should be equal to 0x0100.
-    let (i, (_version, is_little_endian)) = try_parse!(i, verify(map(
-        // Extract the version and IM/MI tag.
-        // If the tag is "IM" then file was written on a little endian machine.
-        pair(le_u16, alt((value(true, tag("IM")), value(false, tag("MI"))))),
-        | (version, is_little_endian) | {
-        		// If we are big endian and the file is little endian then swap bytes.
-            #[cfg(target_endian = "big")]
-            {
-                if is_little_endian {
-                    (version.swap_bytes(), true)
-                }
-                else {
-                    (version, false)
-                }
-            }
-            // If we are little endian and the file is big endian then swap bytes.
-            #[cfg(target_endian = "little")]
-            {
-                if is_little_endian {
-                    (version, true)
-                }
-                else {
-                    (version.swap_bytes(), false)
-                }
-            }
+    let (i, (_version, endian)) = try_parse!(i, verify(map(
+        // Extract the version and endianness as a pair/tuple.
+        pair(/* version -> */ le_u16, /* endianness -> */ alt((
+            // If "IM" then file was written on a little endian machine.
+            value(Endianness::Little, tag("IM")),
+            // If "MI" then file was written on a big endian machine.
+            value(Endianness::Big, tag("MI"))
+        ))),
+        // map() version from file endianness to native endianness.
+        | (version, endian) | {
+            (version.swap_bytes_from(endian), endian)
         }),
-        // Verify the version (after byte swapping) is equal to 0x0100.
+        // verify() version is equal to 0x0100.
         | (version, _) | version == &0x0100 ));
     
     // Return the remaining input `i` and the header.    
     Ok((i, Header {
         text: text.into(),
-        is_little_endian: is_little_endian,
+        endian: endian,
     }))
 }
 
@@ -719,11 +745,7 @@ pub fn parse_all(i: &[u8]) -> IResult<&[u8], ParseResult> {
     do_parse!(
         i,
         header: parse_header
-            >> endianness: value!(if header.is_little_endian {
-                nom::number::Endianness::Little
-            } else {
-                nom::number::Endianness::Big
-            })
+            >> endianness: value!(header.endian)
             >> data_elements: many0!(complete!(call!(parse_next_data_element, endianness)))
             >> (ParseResult {
                 header: header,
