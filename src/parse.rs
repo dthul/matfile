@@ -22,7 +22,7 @@ use std::io::Read;
 trait SwapBytes {
     /// Convert a value from some endianness to the endianness of the machine
     /// your program is running on.  For example, if running on a little endian
-    /// machine than:
+    /// machine then:
     /// 
     /// ```ignore
     /// # use nom::number::Endianness;
