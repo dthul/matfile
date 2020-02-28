@@ -705,7 +705,7 @@ mod test {
 
         let (_, parsed_data) = parse_all(data).unwrap();
         let parsed_matrix_data = parsed_data.data_elements[0].clone();
-        if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =
+        if let DataElement::SparseMatrix(_flags, dim, _name, irows, icols, real_vals, imag_vals) =
             parsed_matrix_data
         {
             assert_eq!(dim, vec![8, 8]);
@@ -727,7 +727,7 @@ mod test {
 
         let (_, parsed_data) = parse_all(data).unwrap();
         let parsed_matrix_data = parsed_data.data_elements[0].clone();
-        if let DataElement::SparseMatrix(flags, dim, name, irows, icols, real_vals, imag_vals) =
+        if let DataElement::SparseMatrix(_flags, dim, _name, irows, icols, real_vals, imag_vals) =
             parsed_matrix_data
         {
             assert_eq!(dim, vec![8, 8]);
