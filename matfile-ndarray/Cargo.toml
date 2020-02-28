@@ -1,6 +1,6 @@
 [package]
 name = "matfile-ndarray"
-version = "0.1.0" # remember to update html_root_url
+version = "0.2.0" # remember to update html_root_url
 authors = ["Daniel Thul <daniel.thul@gmail.com>"]
 edition = "2018"
 
@@ -13,5 +13,5 @@ repository = "https://github.com/dthul/matfile"
 
 [dependencies]
 matfile = { version = "0.2", path = ".." }
-ndarray = "0.12"
+ndarray = "0.13"
 num-complex = "0.2"

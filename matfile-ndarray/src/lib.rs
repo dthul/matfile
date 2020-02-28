@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/matfile-ndarray/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/matfile-ndarray/0.2.0")]
 
 //! Helpers for converting between `matfile::Array` and `ndarray::Array`.
 //! 
