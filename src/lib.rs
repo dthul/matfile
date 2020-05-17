@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/matfile/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/matfile/0.2.1")]
 
 //! Matfile is a library for reading (and in the future writing) Matlab ".mat" files.
 //!
