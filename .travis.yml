@@ -10,4 +10,5 @@ matrix:
 script:
   - cd "${TRAVIS_BUILD_DIR}"
   - cargo build
+  - cargo build --all-features
   - cargo test --all-features
