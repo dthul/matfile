@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2021-06-26
+### Changed
+- Turned `matfile-ndarray` from a separate crate into a feature of `matfile`. Activate it with the Cargo `ndarray` feature flag
+- The `ndarray` conversions now use the standard library's `TryInto` trait
+- Updated `enum-primitive-derive` to version `0.2`
+- Updated `nom` to version `6`. This is a breaking change since it changes the definition of the `matfile::Error` type
+- Updated `ndarray` to version `0.15`
+- Updated `num-complex` to version `0.4`
+
 ## [0.2.1] - 2020-05-17
 ### Changed
 - Updated libflate to version 1.0
