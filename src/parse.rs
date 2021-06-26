@@ -280,11 +280,11 @@ fn parse_data_element_tag(
             data_type: u32!(endianness) >>
             byte_size: u32!(endianness) >>
             (DataElementTag {
-                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure((
-                    i,
+                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure(nom::error::Error {
+                    input: i,
                     // TODO
-                    nom::error::ErrorKind::Tag
-                )))?,
+                    code: nom::error::ErrorKind::Tag
+                }))?,
                 data_byte_size: byte_size,
                 padding_byte_size: ceil_to_multiple(byte_size, 8) - byte_size,
             })
@@ -294,11 +294,11 @@ fn parse_data_element_tag(
             data_type: map!(peek!(u32!(endianness)), |b| b & 0x0000FFFF) >>
             byte_size: map!(u32!(endianness), |b| (b & 0xFFFF0000) >> 16) >>
             (DataElementTag {
-                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure((
-                    i,
+                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure(nom::error::Error {
+                    input: i,
                     // TODO
-                    nom::error::ErrorKind::Tag
-                )))?,
+                    code: nom::error::ErrorKind::Tag
+                }))?,
                 // TODO: assert that byte_size is <= 4
                 data_byte_size: byte_size as u32,
                 padding_byte_size: 4 - byte_size as u32,
@@ -374,14 +374,20 @@ fn parse_array_flags_subelement(
                 global: (flags_and_class & 0x0400) != 0,
                 logical: (flags_and_class & 0x0200) != 0,
                 class: ArrayType::from_u8((flags_and_class & 0xFF) as u8).ok_or(
-                    nom::Err::Failure((i, nom::error::ErrorKind::Tag)) // TODO
+                    nom::Err::Failure(nom::error::Error {
+                        input: i,
+                        code: nom::error::ErrorKind::Tag
+                    }) // TODO
                 )?,
                 nzmax: nzmax as usize,
             })
     )
 }
 
-fn parse_matrix_data_element(i: &[u8], endianness:  nom::number::Endianness) -> IResult<&[u8], DataElement> {
+fn parse_matrix_data_element(
+    i: &[u8],
+    endianness: nom::number::Endianness,
+) -> IResult<&[u8], DataElement> {
     do_parse!(
         i,
         flags: call!(parse_array_flags_subelement, endianness)
@@ -524,12 +530,18 @@ fn parse_compressed_data_element(
     Decoder::new(i)
         .map_err(|err| {
             eprintln!("{:?}", err);
-            nom::Err::Failure((i, nom::error::ErrorKind::Tag)) // TODO
+            nom::Err::Failure(nom::error::Error {
+                input: i,
+                code: nom::error::ErrorKind::Tag,
+            }) // TODO
         })?
         .read_to_end(&mut buf)
         .map_err(|err| {
             eprintln!("{:?}", err);
-            nom::Err::Failure((i, nom::error::ErrorKind::Tag)) // TODO
+            nom::Err::Failure(nom::error::Error {
+                input: i,
+                code: nom::error::ErrorKind::Tag,
+            }) // TODO
         })?;
     let (_remaining, data_element) = parse_next_data_element(buf.as_slice(), endianness)
         .map_err(|err| replace_err_slice(err, i))?;
@@ -573,7 +585,7 @@ fn parse_numeric_matrix_subelements(
 
 fn parse_sparse_matrix_subelements(
     i: &[u8],
-    endianness:  nom::number::Endianness,
+    endianness: nom::number::Endianness,
     flags: ArrayFlags,
 ) -> IResult<&[u8], DataElement> {
     // Figure out the type of array
@@ -612,7 +624,7 @@ fn parse_sparse_matrix_subelements(
 
 fn parse_row_index_array_subelement(
     i: &[u8],
-    endianness:  nom::number::Endianness,
+    endianness: nom::number::Endianness,
 ) -> IResult<&[u8], RowIndex> {
     do_parse!(
         i,
@@ -634,7 +646,7 @@ fn parse_row_index_array_subelement(
 
 fn parse_column_index_array_subelement(
     i: &[u8],
-    endianness:  nom::number::Endianness,
+    endianness: nom::number::Endianness,
 ) -> IResult<&[u8], ColumnShift> {
     do_parse!(
         i,
@@ -655,12 +667,18 @@ fn parse_column_index_array_subelement(
 }
 
 pub fn replace_err_slice<'old, 'new>(
-    err: nom::Err<(&'old [u8], nom::error::ErrorKind)>,
+    err: nom::Err<nom::error::Error<&'old [u8]>>,
     new_slice: &'new [u8],
-) -> nom::Err<(&'new [u8], nom::error::ErrorKind)> {
+) -> nom::Err<nom::error::Error<&'new [u8]>> {
     match err {
-        nom::Err::Error((_, kind)) => nom::Err::Error((new_slice, kind)),
-        nom::Err::Failure((_, kind)) => nom::Err::Failure((new_slice, kind)),
+        nom::Err::Error(nom::error::Error { code, .. }) => nom::Err::Error(nom::error::Error {
+            code,
+            input: new_slice,
+        }),
+        nom::Err::Failure(nom::error::Error { code, .. }) => nom::Err::Failure(nom::error::Error {
+            code,
+            input: new_slice,
+        }),
         nom::Err::Incomplete(needed) => nom::Err::Incomplete(needed),
     }
 }

@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/matfile/0.2.1")]
+#![doc(html_root_url = "https://docs.rs/matfile/0.3.0")]
 
 //! Matfile is a library for reading (and in the future writing) Matlab ".mat" files.
 //!
@@ -393,7 +393,7 @@ impl NumericData {
 #[derive(Debug)]
 pub enum Error {
     IOError(std::io::Error),
-    ParseError(nom::Err<(&'static [u8], nom::error::ErrorKind)>),
+    ParseError(nom::Err<nom::error::Error<&'static [u8]>>),
     ConversionError,
     InternalError,
 }
