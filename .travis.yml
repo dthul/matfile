@@ -8,3 +8,7 @@ matrix:
     - rust: nightly
   fast_finish: true
 cache: cargo
+script:
+  - cd "${TRAVIS_BUILD_DIR}/matfile"
+  - cargo build
+  - cargo test --all-features

@@ -1,5 +1,3 @@
-#![doc(html_root_url = "https://docs.rs/matfile-ndarray/0.3.0")]
-
 //! Helpers for converting between `matfile::Array` and `ndarray::Array`.
 //!
 //! While `matfile` arrays abstract over the underlying data type, `ndarray`
@@ -11,7 +9,7 @@
 //! First, bring the `TryInto` trait into scope:
 //!
 //! ```rust
-//! use matfile_ndarray::TryInto;
+//! use std::convert::TryInto;
 //! ```
 //!
 //! ## Dynamically dimensioned arrays
@@ -19,12 +17,12 @@
 //! Converting a `matfile` array `mf_arr` to a dynamic dimension `ndarray` array
 //! `nd_arr`:
 //! ```rust
-//! # fn main() -> Result<(), Box<std::error::Error>> {
-//! #     let data = include_bytes!("../../tests/multidimensional.mat");
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! #     let data = include_bytes!("../tests/multidimensional.mat");
 //! #     let mat_file = matfile::MatFile::parse(data.as_ref()).unwrap();
 //! #     let mf_arr = &mat_file.arrays()[0];
-//! #     use ndarray;
-//! #     use matfile_ndarray::TryInto;
+//! #     use ndarr as ndarray;
+//! #     use std::convert::TryInto;
 //! let nd_arr: ndarray::ArrayD<f64> = mf_arr.try_into()?;
 //! #     Ok(())
 //! # }
@@ -35,23 +33,23 @@
 //! Converting a `matfile` array `mf_arr` to a static dimension `ndarray` array
 //! `nd_arr`:
 //! ```rust
-//! # fn main() -> Result<(), Box<std::error::Error>> {
-//! #     let data = include_bytes!("../../tests/single_complex.mat");
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! #     let data = include_bytes!("../tests/single_complex.mat");
 //! #     let mat_file = matfile::MatFile::parse(data.as_ref()).unwrap();
 //! #     let mf_arr = &mat_file.arrays()[0];
-//! #     use ndarray;
-//! #     use matfile_ndarray::TryInto;
+//! #     use ndarr as ndarray;
 //! #     use num_complex;
+//! #     use std::convert::TryInto;
 //! let nd_arr: ndarray::Array2<num_complex::Complex<f32>> = mf_arr.try_into()?;
 //! #     Ok(())
 //! # }
 //! ```
 
-use matfile as mf;
-use ndarray as nd;
-use ndarray::IntoDimension;
-use ndarray::ShapeBuilder;
+use ndarr as nd;
+use ndarr::IntoDimension;
+use ndarr::ShapeBuilder;
 use num_complex::Complex;
+use std::convert::TryInto;
 
 #[derive(Debug)]
 pub enum Error {
@@ -77,21 +75,13 @@ impl std::error::Error for Error {
     }
 }
 
-/// This trait is at the time of this writing a nightly-only experimental API
-/// and so we just replicate it here, so it will be easy to switch to it later
-/// on.
-pub trait TryInto<T> {
-    type Error;
-    fn try_into(self) -> Result<T, Self::Error>;
-}
-
 macro_rules! dynamic_conversions {
     ( $num:ty, $variant:ident ) => {
-        impl<'me> TryInto<nd::ArrayViewD<'me, $num>> for &'me mf::Array {
+        impl<'me> TryInto<nd::ArrayViewD<'me, $num>> for &'me crate::Array {
             type Error = Error;
             fn try_into(self) -> Result<nd::ArrayViewD<'me, $num>, Self::Error> {
                 match self.data() {
-                    mf::NumericData::$variant {
+                    crate::NumericData::$variant {
                         ref real,
                         imag: None,
                     } => {
@@ -104,11 +94,11 @@ macro_rules! dynamic_conversions {
             }
         }
 
-        impl TryInto<nd::ArrayD<$num>> for &mf::Array {
+        impl TryInto<nd::ArrayD<$num>> for &crate::Array {
             type Error = Error;
             fn try_into(self) -> Result<nd::ArrayD<$num>, Self::Error> {
                 match self.data() {
-                    mf::NumericData::$variant {
+                    crate::NumericData::$variant {
                         ref real,
                         imag: None,
                     } => {
@@ -121,11 +111,11 @@ macro_rules! dynamic_conversions {
             }
         }
 
-        impl TryInto<nd::ArrayD<Complex<$num>>> for &mf::Array {
+        impl TryInto<nd::ArrayD<Complex<$num>>> for &crate::Array {
             type Error = Error;
             fn try_into(self) -> Result<nd::ArrayD<Complex<$num>>, Self::Error> {
                 match self.data() {
-                    mf::NumericData::$variant {
+                    crate::NumericData::$variant {
                         ref real,
                         imag: Some(ref imag),
                     } => {
@@ -147,7 +137,9 @@ macro_rules! dynamic_conversions {
 
 macro_rules! static_conversions_n {
     ( $num:ty, $variant:ident, $ndims:literal ) => {
-        impl<'me> TryInto<nd::ArrayView<'me, $num, nd::Dim<[nd::Ix; $ndims]>>> for &'me mf::Array {
+        impl<'me> TryInto<nd::ArrayView<'me, $num, nd::Dim<[nd::Ix; $ndims]>>>
+            for &'me crate::Array
+        {
             type Error = Error;
             fn try_into(
                 self,
@@ -159,7 +151,7 @@ macro_rules! static_conversions_n {
                 let mut shape = [0; $ndims];
                 shape.copy_from_slice(size);
                 match self.data() {
-                    mf::NumericData::$variant {
+                    crate::NumericData::$variant {
                         ref real,
                         imag: None,
                     } => {
@@ -172,7 +164,7 @@ macro_rules! static_conversions_n {
             }
         }
 
-        impl TryInto<nd::Array<$num, nd::Dim<[nd::Ix; $ndims]>>> for &mf::Array {
+        impl TryInto<nd::Array<$num, nd::Dim<[nd::Ix; $ndims]>>> for &crate::Array {
             type Error = Error;
             fn try_into(self) -> Result<nd::Array<$num, nd::Dim<[nd::Ix; $ndims]>>, Self::Error> {
                 let size = self.size();
@@ -182,7 +174,7 @@ macro_rules! static_conversions_n {
                 let mut shape = [0; $ndims];
                 shape.copy_from_slice(size);
                 match self.data() {
-                    mf::NumericData::$variant {
+                    crate::NumericData::$variant {
                         ref real,
                         imag: None,
                     } => {
@@ -195,7 +187,7 @@ macro_rules! static_conversions_n {
             }
         }
 
-        impl TryInto<nd::Array<Complex<$num>, nd::Dim<[nd::Ix; $ndims]>>> for &mf::Array {
+        impl TryInto<nd::Array<Complex<$num>, nd::Dim<[nd::Ix; $ndims]>>> for &crate::Array {
             type Error = Error;
             fn try_into(
                 self,
@@ -207,7 +199,7 @@ macro_rules! static_conversions_n {
                 let mut shape = [0; $ndims];
                 shape.copy_from_slice(size);
                 match self.data() {
-                    mf::NumericData::$variant {
+                    crate::NumericData::$variant {
                         ref real,
                         imag: Some(ref imag),
                     } => {

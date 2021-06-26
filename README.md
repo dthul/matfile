@@ -56,3 +56,40 @@ Some(
 )
 ```
 Note that data is stored in column-major format. For higher dimensions that means that the first dimension has the fastest varying index.
+
+# `ndarray` support
+
+Helpers for converting between `matfile::Array` and `ndarray::Array` can be enabled with the `ndarray` feature:
+
+```toml
+[dependencies]
+matfile = { version = "0.3", features = ["ndarray"] }
+```
+
+While `matfile` arrays abstract over the underlying data type, `ndarray`
+arrays are parameterized by a concrete data type. Thus the conversions
+provided are fallible in case the data types are not compatible.
+
+## Examples
+
+First, bring the `TryInto` trait into scope:
+
+```rust
+use std::convert::TryInto;
+```
+
+## Dynamically dimensioned arrays
+
+Converting a `matfile` array `mf_arr` to a dynamic dimension `ndarray` array
+`nd_arr`:
+```rust
+let nd_arr: ndarray::ArrayD<f64> = mf_arr.try_into()?;
+```
+
+## Statically dimensioned arrays
+
+Converting a `matfile` array `mf_arr` to a static dimension `ndarray` array
+`nd_arr`:
+```rust
+let nd_arr: ndarray::Array2<num_complex::Complex<f32>> = mf_arr.try_into()?;
+```

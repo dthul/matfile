@@ -58,6 +58,8 @@
 #[macro_use]
 extern crate enum_primitive_derive;
 
+#[cfg(feature = "ndarray")]
+mod ndarray;
 mod parse;
 
 /// MatFile is a collection of named arrays.
