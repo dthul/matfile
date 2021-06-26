@@ -1,6 +1,6 @@
 [package]
 name = "matfile"
-version = "0.3.0" # remember to update html_root_url
+version = "0.3.1" # remember to update html_root_url
 authors = ["Daniel Thul <daniel.thul@gmail.com>"]
 edition = "2018"
 
@@ -22,3 +22,6 @@ nom = "6"
 num-traits = "0.2"
 ndarr = { version = "0.15", package = "ndarray", optional = true }
 num-complex = { version = "0.4", optional = true }
+
+[package.metadata.docs.rs]
+all-features = true

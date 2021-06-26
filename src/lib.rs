@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/matfile/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/matfile/0.3.1")]
 
 //! Matfile is a library for reading (and in the future writing) Matlab ".mat" files.
 //!
@@ -53,13 +53,17 @@
 //!     }
 //! )
 //! ```
-//! Note that data is stored in column-major format. For higher dimensions that means that the first dimension has the fastest varying index.
+//!
+//! ## Crate Feature Flags
+//! The following crate feature flags can be enabled in your Cargo.toml:
+//! * `ndarray`
+//!   * Enable conversions between Matfile and `ndarray` array types
 
 #[macro_use]
 extern crate enum_primitive_derive;
 
 #[cfg(feature = "ndarray")]
-mod ndarray;
+pub mod ndarray;
 mod parse;
 
 /// MatFile is a collection of named arrays.
