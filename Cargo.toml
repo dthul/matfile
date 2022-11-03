@@ -18,7 +18,7 @@ ndarray = ["ndarr", "num-complex"]
 [dependencies]
 enum-primitive-derive = "0.2"
 libflate = "1.0"
-nom = "6"
+nom = "7"
 num-traits = "0.2"
 ndarr = { version = "0.15", package = "ndarray", optional = true }
 num-complex = { version = "0.4", optional = true }

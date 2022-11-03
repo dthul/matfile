@@ -1,12 +1,22 @@
 use libflate::zlib::Decoder;
-use nom::number::complete::{
-    be_f32, be_f64, be_i16, be_i32, be_i64, be_i8, be_u16, be_u32, be_u64, be_u8, le_f32, le_f64,
-    le_i16, le_i32, le_i64, le_i8, le_u16, le_u32, le_u64, le_u8,
-};
-use nom::{
-    alt, call, char, complete, cond, count, do_parse, error_position, i32, length_value, many0,
-    map, map_res, not, opt, pair, peek, switch, tag, take, u16, u32, value, IResult,
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::bytes::complete::take;
+use nom::character::complete::char;
+use nom::combinator::{complete, cond, map, map_res, not, opt, peek, value};
+use nom::multi::{count, length_value, many0};
+use nom::number::complete::f32;
+use nom::number::complete::f64;
+use nom::number::complete::i16;
+use nom::number::complete::i32;
+use nom::number::complete::i64;
+use nom::number::complete::i8;
+use nom::number::complete::u16;
+use nom::number::complete::u32;
+use nom::number::complete::u64;
+use nom::number::complete::u8;
+use nom::sequence::pair;
+use nom::{error_position, IResult};
 use num_traits::FromPrimitive;
 use std::io::Read;
 
@@ -102,65 +112,72 @@ pub enum DataElement {
 //     }
 // }
 
-fn assert(i: &[u8], v: bool) -> IResult<&[u8], ()> {
-    if v {
-        Ok((i, ()))
-    } else {
-        Err(nom::Err::Failure(error_position!(
+pub fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
+    // Make sure that the first four bytes are not null
+    let (i, _) = peek(count(pair(not(char('\0')), take(1usize)), 4))(i)?;
+    // Header text field
+    let (i, text) = take(116usize)(i)?;
+    // Header subsystem data offset field
+    let (i, _ssdo) = take(8usize)(i)?;
+    // Header flag fields
+    // Assume little endian for now
+    let (i, mut version) = u16(nom::number::Endianness::Little)(i)?;
+    // Check the endianness
+    let (i, is_little_endian) = alt((value(true, tag("IM")), value(false, tag("MI"))))(i)?;
+    // Fix endianness of the version field if we assumed the wrong one
+    if !is_little_endian {
+        version = version.swap_bytes();
+    }
+    if version != 0x0100 {
+        return Err(nom::Err::Failure(error_position!(
             i,
             // TODO
             nom::error::ErrorKind::Tag
-        )))
+        )));
     }
-}
-
-pub fn parse_header(i: &[u8]) -> IResult<&[u8], Header> {
-    do_parse!(
+    Ok((
         i,
-        // Make sure that the first four bytes are not null.
-        peek!(count!(pair!(not!(char!('\0')), take!(1)), 4)) >>
-        text: take!(116) >> // text field
-        _ssdo: take!(8) >> // subsystem data offset
-        // Assume little endian for now
-        version: u16!(nom::number::Endianness::Little) >>
-        // Check the endianness
-        is_little_endian: alt!(value!(true, tag!("IM")) | value!(false, tag!("MI"))) >>
-        // Fix endianness of the version field if we assumed the wrong one
-        version: value!(if is_little_endian { version } else { version.swap_bytes() }) >>
-        call!(assert, version == 0x0100) >>
-        (Header {
+        Header {
             text: std::str::from_utf8(text).unwrap_or(&"").to_owned(),
             is_little_endian: is_little_endian,
-        })
-    )
+        },
+    ))
+}
+
+fn constant<T: Clone>(v: T) -> impl Fn(&[u8]) -> IResult<&[u8], T> {
+    move |i: &[u8]| Ok((i, v.clone()))
 }
 
 fn parse_next_data_element(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], DataElement> {
-    do_parse!(
-        i,
-        data_element_tag: call!(parse_data_element_tag, endianness) >>
-        next_parser: value!(
-            match data_element_tag.data_type {
-                DataType::Matrix => parse_matrix_data_element,
-                DataType::Compressed => parse_compressed_data_element,
-                _ => {
-                    println!("Unsupported variable type: {:?} (must be Matrix or Compressed)", data_element_tag.data_type);
-                    parse_unsupported_data_element
-                }
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElement> {
+    move |i: &[u8]| {
+        let (i, data_element_tag) = parse_data_element_tag(endianness)(i)?;
+        let next_parser: Box<dyn Fn(_) -> _> = match data_element_tag.data_type {
+            DataType::Matrix => Box::new(parse_matrix_data_element(endianness)),
+            DataType::Compressed => Box::new(parse_compressed_data_element(endianness)),
+            _ => {
+                println!(
+                    "Unsupported variable type: {:?} (must be Matrix or Compressed)",
+                    data_element_tag.data_type
+                );
+                Box::new(parse_unsupported_data_element(endianness))
             }
-        ) >>
-        data_element: length_value!(value!(data_element_tag.data_byte_size), call!(next_parser, endianness)) >>
-        // Take care of padding. It seems like either all variables in a mat file compressed or none are.
+        };
+        let (i, data_element) =
+            length_value(constant(data_element_tag.data_byte_size), next_parser)(i)?;
+        // Take care of padding. It seems like either all variables in a mat file are compressed or none are.
         // If the variables are compressed there is no alignment to take care of (only uncompressed data
-        // needs to be aligned according to the spec). Otherwise make sure that we end up on a 8 byte
+        // needs to be aligned according to the spec). Otherwise make sure that we end up on an 8 byte
         // boundary (ignore if there is not enough data left)
-        padding_bytes: value!(if data_element_tag.data_type == DataType::Compressed { 0 } else { data_element_tag.padding_byte_size }) >>
-        opt!(complete!(take!(padding_bytes))) >>
-        (data_element)
-    )
+        let num_padding_bytes = if data_element_tag.data_type == DataType::Compressed {
+            0
+        } else {
+            data_element_tag.padding_byte_size
+        };
+        let (i, _) = opt(complete(take(num_padding_bytes)))(i)?;
+        Ok((i, data_element))
+    }
 }
 
 fn ceil_to_multiple(x: u32, multiple: u32) -> u32 {
@@ -269,139 +286,143 @@ pub struct DataElementTag {
 }
 
 fn parse_data_element_tag(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], DataElementTag> {
-    switch!(
-        i,
-        map!(peek!(u32!(endianness)), |b| b & 0xFFFF0000),
-        0 => do_parse!(
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElementTag> {
+    move |i: &[u8]| {
+        let (i, starting_bytes) = u32(endianness)(i)?;
+        let (i, data_type, byte_size, padding_byte_size) = if starting_bytes & 0xFFFF0000 == 0 {
             // Long Data Element Format
-            data_type: u32!(endianness) >>
-            byte_size: u32!(endianness) >>
-            (DataElementTag {
-                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure(nom::error::Error {
-                    input: i,
-                    // TODO
-                    code: nom::error::ErrorKind::Tag
-                }))?,
-                data_byte_size: byte_size,
-                padding_byte_size: ceil_to_multiple(byte_size, 8) - byte_size,
-            })
-        ) |
-        _ => do_parse!(
+            let data_type = starting_bytes;
+            let (i, byte_size) = u32(endianness)(i)?;
+            let padding_byte_size = ceil_to_multiple(byte_size, 8) - byte_size;
+            (i, data_type, byte_size, padding_byte_size)
+        } else {
             // Small Data Element Format
-            data_type: map!(peek!(u32!(endianness)), |b| b & 0x0000FFFF) >>
-            byte_size: map!(u32!(endianness), |b| (b & 0xFFFF0000) >> 16) >>
-            (DataElementTag {
-                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure(nom::error::Error {
-                    input: i,
+            let data_type = starting_bytes & 0x0000FFFF;
+            let byte_size = (starting_bytes & 0xFFFF0000) >> 16;
+            // Assert that byte_size is <= 4
+            if byte_size > 4 {
+                return Err(nom::Err::Failure(error_position!(
+                    i,
                     // TODO
-                    code: nom::error::ErrorKind::Tag
-                }))?,
-                // TODO: assert that byte_size is <= 4
-                data_byte_size: byte_size as u32,
-                padding_byte_size: 4 - byte_size as u32,
-            })
-        )
-    )
+                    nom::error::ErrorKind::Tag
+                )));
+            }
+            let padding_byte_size = 4 - byte_size;
+            (i, data_type, byte_size, padding_byte_size)
+        };
+        Ok((
+            i,
+            DataElementTag {
+                data_type: DataType::from_u32(data_type).ok_or(nom::Err::Failure(
+                    nom::error::Error {
+                        input: i,
+                        // TODO
+                        code: nom::error::ErrorKind::Tag,
+                    },
+                ))?,
+                data_byte_size: byte_size,
+                padding_byte_size: padding_byte_size,
+            },
+        ))
+    }
 }
 
 fn parse_array_name_subelement(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], String> {
-    do_parse!(
-        i,
-        data_element_tag: call!(parse_data_element_tag, endianness)
-            >> call!(
-                assert,
-                data_element_tag.data_type == DataType::Int8 && data_element_tag.data_byte_size > 0
-            )
-            >> name: map_res!(take!(data_element_tag.data_byte_size), |b| {
-                std::str::from_utf8(b)
-                    .map(|s| s.to_owned())
-                    .map_err(|_err| {
-                        nom::Err::Failure((i, nom::error::ErrorKind::Tag)) // TODO
-                    })
-            })
-            // Padding bytes
-            >> take!(data_element_tag.padding_byte_size)
-            >> (name)
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], String> {
+    move |i: &[u8]| {
+        let (i, data_element_tag) = parse_data_element_tag(endianness)(i)?;
+        if !(data_element_tag.data_type == DataType::Int8 && data_element_tag.data_byte_size > 0) {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, name) = map_res(take(data_element_tag.data_byte_size), |b| {
+            std::str::from_utf8(b)
+                .map(|s| s.to_owned())
+                .map_err(|_err| {
+                    nom::Err::Failure((i, nom::error::ErrorKind::Tag)) // TODO
+                })
+        })(i)?;
+        // Padding bytes
+        let (i, _) = take(data_element_tag.padding_byte_size)(i)?;
+        Ok((i, name))
+    }
 }
 
 fn parse_dimensions_array_subelement(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], Dimensions> {
-    do_parse!(
-        i,
-        data_element_tag: call!(parse_data_element_tag, endianness)
-            >> call!(
-                assert,
-                data_element_tag.data_type == DataType::Int32
-                    && data_element_tag.data_byte_size >= 8
-                    && data_element_tag.data_byte_size % 4 == 0
-            )
-            >> dimensions:
-                count!(
-                    i32!(endianness),
-                    (data_element_tag.data_byte_size / 4) as usize
-                )
-            // Padding bytes
-            >> take!(data_element_tag.padding_byte_size)
-            >> (dimensions)
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], Dimensions> {
+    move |i: &[u8]| {
+        let (i, data_element_tag) = parse_data_element_tag(endianness)(i)?;
+        if !(data_element_tag.data_type == DataType::Int32
+            && data_element_tag.data_byte_size >= 8
+            && data_element_tag.data_byte_size % 4 == 0)
+        {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, dimensions) = count(
+            i32(endianness),
+            (data_element_tag.data_byte_size / 4) as usize,
+        )(i)?;
+        let (i, _) = take(data_element_tag.padding_byte_size)(i)?;
+        Ok((i, dimensions))
+    }
 }
 
 fn parse_array_flags_subelement(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], ArrayFlags> {
-    do_parse!(
-        i,
-        tag_data_type: u32!(endianness)
-            >> tag_data_len: u32!(endianness)
-            >> call!(
-                assert,
-                tag_data_type == DataType::UInt32 as u32 && tag_data_len == 8
-            )
-            >> flags_and_class: u32!(endianness)
-            >> nzmax: u32!(endianness)
-            >> (ArrayFlags {
+) -> impl Fn(&[u8]) -> IResult<&[u8], ArrayFlags> {
+    move |i: &[u8]| {
+        let (i, tag_data_type) = u32(endianness)(i)?;
+        let (i, tag_data_len) = u32(endianness)(i)?;
+        if !(tag_data_type == DataType::UInt32 as u32 && tag_data_len == 8) {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, flags_and_class) = u32(endianness)(i)?;
+        let (i, nzmax) = u32(endianness)(i)?;
+        Ok((
+            i,
+            ArrayFlags {
                 complex: (flags_and_class & 0x0800) != 0,
                 global: (flags_and_class & 0x0400) != 0,
                 logical: (flags_and_class & 0x0200) != 0,
                 class: ArrayType::from_u8((flags_and_class & 0xFF) as u8).ok_or(
                     nom::Err::Failure(nom::error::Error {
                         input: i,
-                        code: nom::error::ErrorKind::Tag
-                    }) // TODO
+                        code: nom::error::ErrorKind::Tag,
+                    }), // TODO
                 )?,
                 nzmax: nzmax as usize,
-            })
-    )
+            },
+        ))
+    }
 }
 
 fn parse_matrix_data_element(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], DataElement> {
-    do_parse!(
-        i,
-        flags: call!(parse_array_flags_subelement, endianness)
-            >> data_element:
-                switch!(value!(flags.class),
-                     ArrayType::Cell => call!(parse_unsupported_data_element, endianness)
-                    | ArrayType::Struct => call!(parse_unsupported_data_element, endianness)
-                    | ArrayType::Object => call!(parse_unsupported_data_element, endianness)
-                    | ArrayType::Char => call!(parse_unsupported_data_element, endianness)
-                    | ArrayType::Sparse => call!(parse_sparse_matrix_subelements, endianness, flags)
-                    | _ => call!(parse_numeric_matrix_subelements, endianness, flags)
-                )
-            >> (data_element)
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElement> {
+    move |i: &[u8]| {
+        let (i, flags) = parse_array_flags_subelement(endianness)(i)?;
+        match flags.class {
+            ArrayType::Cell | ArrayType::Struct | ArrayType::Object | ArrayType::Char => {
+                parse_unsupported_data_element(endianness)(i)
+            }
+            ArrayType::Sparse => parse_sparse_matrix_subelements(endianness, flags)(i),
+            _ => parse_numeric_matrix_subelements(endianness, flags)(i),
+        }
+    }
 }
 
 fn numeric_data_types_are_compatible(array_type: DataType, subelement_type: DataType) -> bool {
@@ -467,203 +488,248 @@ fn numeric_data_types_are_compatible(array_type: DataType, subelement_type: Data
 }
 
 fn parse_numeric_subelement(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], NumericData> {
-    do_parse!(
-        i,
-        data_element_tag: call!(parse_data_element_tag, endianness)
-            >> numeric_data:
-                switch!(value!(data_element_tag.data_type),
-                    DataType::Int8 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_i8, data_element_tag.data_byte_size as usize) |
-                        nom::number::Endianness::Little => count!(le_i8, data_element_tag.data_byte_size as usize)
-                    ), |data| NumericData::Int8(data)) |
-                    DataType::UInt8 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_u8, data_element_tag.data_byte_size as usize) |
-                        nom::number::Endianness::Little => count!(le_u8, data_element_tag.data_byte_size as usize)
-                    ), |data| NumericData::UInt8(data)) |
-                    DataType::Int16 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_i16, data_element_tag.data_byte_size as usize / 2) |
-                        nom::number::Endianness::Little => count!(le_i16, data_element_tag.data_byte_size as usize / 2)
-                    ), |data| NumericData::Int16(data)) |
-                    DataType::UInt16 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_u16, data_element_tag.data_byte_size as usize / 2) |
-                        nom::number::Endianness::Little => count!(le_u16, data_element_tag.data_byte_size as usize / 2)
-                    ), |data| NumericData::UInt16(data)) |
-                    DataType::Int32 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_i32, data_element_tag.data_byte_size as usize / 4) |
-                        nom::number::Endianness::Little => count!(le_i32, data_element_tag.data_byte_size as usize / 4)
-                    ), |data| NumericData::Int32(data)) |
-                    DataType::UInt32 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_u32, data_element_tag.data_byte_size as usize / 4) |
-                        nom::number::Endianness::Little => count!(le_u32, data_element_tag.data_byte_size as usize / 4)
-                    ), |data| NumericData::UInt32(data)) |
-                    DataType::Int64 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_i64, data_element_tag.data_byte_size as usize / 8) |
-                        nom::number::Endianness::Little => count!(le_i64, data_element_tag.data_byte_size as usize / 8)
-                    ), |data| NumericData::Int64(data)) |
-                    DataType::UInt64 => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_u64, data_element_tag.data_byte_size as usize / 8) |
-                        nom::number::Endianness::Little => count!(le_u64, data_element_tag.data_byte_size as usize / 8)
-                    ), |data| NumericData::UInt64(data)) |
-                    DataType::Single => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_f32, data_element_tag.data_byte_size as usize / 4) |
-                        nom::number::Endianness::Little => count!(le_f32, data_element_tag.data_byte_size as usize / 4)
-                    ), |data| NumericData::Single(data)) |
-                    DataType::Double => map!(switch!(value!(endianness),
-                        nom::number::Endianness::Big => count!(be_f64, data_element_tag.data_byte_size as usize / 8) |
-                        nom::number::Endianness::Little => count!(le_f64, data_element_tag.data_byte_size as usize / 8)
-                    ), |data| NumericData::Double(data))
-                )
-            // Padding bytes
-            >> take!(data_element_tag.padding_byte_size)
-            >> (numeric_data)
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], NumericData> {
+    move |i: &[u8]| {
+        let (i, data_element_tag) = parse_data_element_tag(endianness)(i)?;
+        let (i, numeric_data) = match data_element_tag.data_type {
+            DataType::Int8 => map(
+                count(i8, data_element_tag.data_byte_size as usize),
+                NumericData::Int8,
+            )(i)?,
+            DataType::UInt8 => map(
+                count(u8, data_element_tag.data_byte_size as usize),
+                NumericData::UInt8,
+            )(i)?,
+            DataType::Int16 => map(
+                count(
+                    i16(endianness),
+                    data_element_tag.data_byte_size as usize / 2,
+                ),
+                NumericData::Int16,
+            )(i)?,
+            DataType::UInt16 => map(
+                count(
+                    u16(endianness),
+                    data_element_tag.data_byte_size as usize / 2,
+                ),
+                NumericData::UInt16,
+            )(i)?,
+            DataType::Int32 => map(
+                count(
+                    i32(endianness),
+                    data_element_tag.data_byte_size as usize / 4,
+                ),
+                NumericData::Int32,
+            )(i)?,
+            DataType::UInt32 => map(
+                count(
+                    u32(endianness),
+                    data_element_tag.data_byte_size as usize / 4,
+                ),
+                NumericData::UInt32,
+            )(i)?,
+            DataType::Int64 => map(
+                count(
+                    i64(endianness),
+                    data_element_tag.data_byte_size as usize / 8,
+                ),
+                NumericData::Int64,
+            )(i)?,
+            DataType::UInt64 => map(
+                count(
+                    u64(endianness),
+                    data_element_tag.data_byte_size as usize / 8,
+                ),
+                NumericData::UInt64,
+            )(i)?,
+            DataType::Single => map(
+                count(
+                    f32(endianness),
+                    data_element_tag.data_byte_size as usize / 4,
+                ),
+                NumericData::Single,
+            )(i)?,
+            DataType::Double => map(
+                count(
+                    f64(endianness),
+                    data_element_tag.data_byte_size as usize / 8,
+                ),
+                NumericData::Double,
+            )(i)?,
+            DataType::Compressed
+            | DataType::Matrix
+            | DataType::Utf8
+            | DataType::Utf16
+            | DataType::Utf32 => {
+                return Err(nom::Err::Failure(error_position!(
+                    i,
+                    // TODO
+                    nom::error::ErrorKind::Tag
+                )));
+            }
+        };
+        // Padding bytes
+        let (i, _) = take(data_element_tag.padding_byte_size)(i)?;
+        Ok((i, numeric_data))
+    }
 }
 
 fn parse_compressed_data_element(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], DataElement> {
-    let mut buf = Vec::new();
-    Decoder::new(i)
-        .map_err(|err| {
-            eprintln!("{:?}", err);
-            nom::Err::Failure(nom::error::Error {
-                input: i,
-                code: nom::error::ErrorKind::Tag,
-            }) // TODO
-        })?
-        .read_to_end(&mut buf)
-        .map_err(|err| {
-            eprintln!("{:?}", err);
-            nom::Err::Failure(nom::error::Error {
-                input: i,
-                code: nom::error::ErrorKind::Tag,
-            }) // TODO
-        })?;
-    let (_remaining, data_element) = parse_next_data_element(buf.as_slice(), endianness)
-        .map_err(|err| replace_err_slice(err, i))?;
-    Ok((&[], data_element))
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElement> {
+    move |i: &[u8]| {
+        let mut buf = Vec::new();
+        Decoder::new(i)
+            .map_err(|err| {
+                eprintln!("{:?}", err);
+                nom::Err::Failure(nom::error::Error {
+                    input: i,
+                    code: nom::error::ErrorKind::Tag,
+                }) // TODO
+            })?
+            .read_to_end(&mut buf)
+            .map_err(|err| {
+                eprintln!("{:?}", err);
+                nom::Err::Failure(nom::error::Error {
+                    input: i,
+                    code: nom::error::ErrorKind::Tag,
+                }) // TODO
+            })?;
+        let (_remaining, data_element) = parse_next_data_element(endianness)(buf.as_slice())
+            .map_err(|err| replace_err_slice(err, i))?;
+        Ok((&[], data_element))
+    }
 }
 
 pub type RowIndex = Vec<usize>;
 pub type ColumnShift = Vec<usize>;
 
 fn parse_numeric_matrix_subelements(
-    i: &[u8],
     endianness: nom::number::Endianness,
     flags: ArrayFlags,
-) -> IResult<&[u8], DataElement> {
-    do_parse!(
-        i,
-        dimensions: call!(parse_dimensions_array_subelement, endianness)
-            >> name: call!(parse_array_name_subelement, endianness)
-
-            >> real_part: call!(parse_numeric_subelement, endianness)
-            // Check that size and type of the real part are correct
-            >> n_required_elements: value!(dimensions.iter().product::<i32>())
-            >> array_data_type: value!(flags.class.numeric_data_type().unwrap())
-            >> call!(assert, real_part.len() == n_required_elements as usize && numeric_data_types_are_compatible(array_data_type, real_part.data_type()))
-
-            >> imag_part: cond!(flags.complex, call!(parse_numeric_subelement, endianness))
-            // Check that size and type of imaginary part are correct if present
-            >> call!(assert,
-                if let Some(imag_part) = &imag_part {
-                    imag_part.len() == n_required_elements as usize && numeric_data_types_are_compatible(array_data_type, imag_part.data_type())
-                } else {
-                    true
-                }
-            )
-
-            >> (DataElement::NumericMatrix(
-                flags, dimensions, name, real_part, imag_part
-            ))
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElement> {
+    move |i: &[u8]| {
+        let (i, dimensions) = parse_dimensions_array_subelement(endianness)(i)?;
+        let (i, name) = parse_array_name_subelement(endianness)(i)?;
+        let (i, real_part) = parse_numeric_subelement(endianness)(i)?;
+        // Check that size and type of the real part are correct
+        let num_required_elements = dimensions.iter().product::<i32>();
+        let array_data_type = flags.class.numeric_data_type().unwrap();
+        if !(real_part.len() == num_required_elements as usize
+            && numeric_data_types_are_compatible(array_data_type, real_part.data_type()))
+        {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, imag_part) = cond(flags.complex, parse_numeric_subelement(endianness))(i)?;
+        // Check that size and type of imaginary part are correct if present
+        if let Some(imag_part) = &imag_part {
+            if !(imag_part.len() == num_required_elements as usize
+                && numeric_data_types_are_compatible(array_data_type, imag_part.data_type()))
+            {
+                return Err(nom::Err::Failure(error_position!(
+                    i,
+                    // TODO
+                    nom::error::ErrorKind::Tag
+                )));
+            }
+        }
+        Ok((
+            i,
+            DataElement::NumericMatrix(flags, dimensions, name, real_part, imag_part),
+        ))
+    }
 }
 
 fn parse_sparse_matrix_subelements(
-    i: &[u8],
     endianness: nom::number::Endianness,
     flags: ArrayFlags,
-) -> IResult<&[u8], DataElement> {
-    // Figure out the type of array
-    do_parse!(
-        i,
-        dimensions: call!(parse_dimensions_array_subelement, endianness)
-            >> name: call!(parse_array_name_subelement, endianness)
-            >> row_index: call!(parse_row_index_array_subelement, endianness)
-            >> column_index: call!(parse_column_index_array_subelement, endianness)
-
-            >> real_part: call!(parse_numeric_subelement, endianness)
-            // Check that size of the real part is correct (can't check for type in sparse matrices)
-            >> call!(assert, real_part.len() == flags.nzmax)
-
-            >> imag_part: cond!(flags.complex, call!(parse_numeric_subelement, endianness))
-            // Check that size of the imaginary part is correct if present (can't check for type in sparse matrices)
-            >> call!(assert,
-                if let Some(imag_part) = &imag_part {
-                    imag_part.len() == flags.nzmax as usize
-                } else {
-                    true
-                }
-            )
-
-            >> (DataElement::SparseMatrix(
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElement> {
+    move |i: &[u8]| {
+        // Figure out the type of array
+        let (i, dimensions) = parse_dimensions_array_subelement(endianness)(i)?;
+        let (i, name) = parse_array_name_subelement(endianness)(i)?;
+        let (i, row_index) = parse_row_index_array_subelement(endianness)(i)?;
+        let (i, column_index) = parse_column_index_array_subelement(endianness)(i)?;
+        let (i, real_part) = parse_numeric_subelement(endianness)(i)?;
+        // Check that size of the real part is correct (can't check for type in sparse matrices)
+        if !(real_part.len() == flags.nzmax) {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, imag_part) = cond(flags.complex, parse_numeric_subelement(endianness))(i)?;
+        // Check that size of the imaginary part is correct if present (can't check for type in sparse matrices)
+        if let Some(imag_part) = &imag_part {
+            if !(imag_part.len() == flags.nzmax as usize) {
+                return Err(nom::Err::Failure(error_position!(
+                    i,
+                    // TODO
+                    nom::error::ErrorKind::Tag
+                )));
+            }
+        }
+        Ok((
+            i,
+            DataElement::SparseMatrix(
                 flags,
                 dimensions,
                 name,
                 row_index.iter().map(|&i| i as usize).collect(),
                 column_index.iter().map(|&i| i as usize).collect(),
                 real_part,
-                imag_part
-            ))
-    )
+                imag_part,
+            ),
+        ))
+    }
 }
 
 fn parse_row_index_array_subelement(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], RowIndex> {
-    do_parse!(
-        i,
-        data_element_tag: call!(parse_data_element_tag, endianness)
-            >> call!(
-                assert,
-                data_element_tag.data_type == DataType::Int32
-                    && data_element_tag.data_byte_size > 0
-            )
-            >> row_index:
-                count!(
-                    i32!(endianness),
-                    (data_element_tag.data_byte_size / 4) as usize
-                )
-            >> take!(data_element_tag.padding_byte_size)
-            >> (row_index.iter().map(|&i| i as usize).collect())
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], RowIndex> {
+    move |i: &[u8]| {
+        let (i, data_element_tag) = parse_data_element_tag(endianness)(i)?;
+        if !(data_element_tag.data_type == DataType::Int32 && data_element_tag.data_byte_size > 0) {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, row_index) = count(
+            i32(endianness),
+            (data_element_tag.data_byte_size / 4) as usize,
+        )(i)?;
+        let (i, _) = take(data_element_tag.padding_byte_size)(i)?;
+        Ok((i, row_index.iter().map(|&i| i as usize).collect()))
+    }
 }
 
 fn parse_column_index_array_subelement(
-    i: &[u8],
     endianness: nom::number::Endianness,
-) -> IResult<&[u8], ColumnShift> {
-    do_parse!(
-        i,
-        data_element_tag: call!(parse_data_element_tag, endianness)
-            >> call!(
-                assert,
-                data_element_tag.data_type == DataType::Int32
-                    && data_element_tag.data_byte_size > 0
-            )
-            >> column_index:
-                count!(
-                    i32!(endianness),
-                    (data_element_tag.data_byte_size / 4) as usize
-                )
-            >> take!(data_element_tag.padding_byte_size)
-            >> (column_index.iter().map(|&i| i as usize).collect())
-    )
+) -> impl Fn(&[u8]) -> IResult<&[u8], ColumnShift> {
+    move |i: &[u8]| {
+        let (i, data_element_tag) = parse_data_element_tag(endianness)(i)?;
+        if !(data_element_tag.data_type == DataType::Int32 && data_element_tag.data_byte_size > 0) {
+            return Err(nom::Err::Failure(error_position!(
+                i,
+                // TODO
+                nom::error::ErrorKind::Tag
+            )));
+        }
+        let (i, column_index) = count(
+            i32(endianness),
+            (data_element_tag.data_byte_size / 4) as usize,
+        )(i)?;
+        let (i, _) = take(data_element_tag.padding_byte_size)(i)?;
+        Ok((i, column_index.iter().map(|&i| i as usize).collect()))
+    }
 }
 
 pub fn replace_err_slice<'old, 'new>(
@@ -684,10 +750,9 @@ pub fn replace_err_slice<'old, 'new>(
 }
 
 fn parse_unsupported_data_element(
-    _i: &[u8],
     _endianness: nom::number::Endianness,
-) -> IResult<&[u8], DataElement> {
-    Ok((&[], DataElement::Unsupported))
+) -> impl Fn(&[u8]) -> IResult<&[u8], DataElement> {
+    |_i: &[u8]| Ok((&[], DataElement::Unsupported))
 }
 
 #[derive(Debug)]
@@ -697,20 +762,20 @@ pub struct ParseResult {
 }
 
 pub fn parse_all(i: &[u8]) -> IResult<&[u8], ParseResult> {
-    do_parse!(
+    let (i, header) = parse_header(i)?;
+    let endianness = if header.is_little_endian {
+        nom::number::Endianness::Little
+    } else {
+        nom::number::Endianness::Big
+    };
+    let (i, data_elements) = many0(complete(parse_next_data_element(endianness)))(i)?;
+    Ok((
         i,
-        header: parse_header
-            >> endianness: value!(if header.is_little_endian {
-                nom::number::Endianness::Little
-            } else {
-                nom::number::Endianness::Big
-            })
-            >> data_elements: many0!(complete!(call!(parse_next_data_element, endianness)))
-            >> (ParseResult {
-                header: header,
-                data_elements: data_elements,
-            })
-    )
+        ParseResult {
+            header: header,
+            data_elements: data_elements,
+        },
+    ))
 }
 
 #[cfg(test)]
