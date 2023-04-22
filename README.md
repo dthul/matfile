@@ -1,7 +1,7 @@
 # Matfile
 
 [![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Build Status]](https://github.com/dthul/matfile/actions/workflows/build.yml/badge.svg)
+[![Build Status](https://github.com/dthul/matfile/actions/workflows/rust.yml/badge.svg)](https://github.com/dthul/matfile/actions/workflows/rust.yml)
 [![Docs](https://docs.rs/matfile/badge.svg)](https://docs.rs/matfile/)
 [![Crates.io Version](https://img.shields.io/crates/v/matfile.svg)](https://crates.io/crates/matfile)
 [![Dependency Status](https://deps.rs/repo/github/dthul/matfile/status.svg)](https://deps.rs/repo/github/dthul/matfile)
