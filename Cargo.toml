@@ -16,8 +16,8 @@ repository = "https://github.com/dthul/matfile"
 ndarray = ["ndarr", "num-complex"]
 
 [dependencies]
-enum-primitive-derive = "0.2"
-libflate = "1.0"
+enum-primitive-derive = "0.3"
+libflate = "2.0"
 nom = "7"
 num-traits = "0.2"
 ndarr = { version = "0.15", package = "ndarray", optional = true }
