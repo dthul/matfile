@@ -17,10 +17,10 @@ ndarray = ["ndarr", "num-complex"]
 
 [dependencies]
 enum-primitive-derive = "0.3"
-libflate = "2.0"
+libflate = "2.1"
 nom = "7"
 num-traits = "0.2"
-ndarr = { version = "0.15", package = "ndarray", optional = true }
+ndarr = { version = "0.16", package = "ndarray", optional = true }
 num-complex = { version = "0.4", optional = true }
 
 [package.metadata.docs.rs]
