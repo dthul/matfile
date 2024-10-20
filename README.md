@@ -64,7 +64,7 @@ Helpers for converting between `matfile::Array` and `ndarray::Array` can be enab
 
 ```toml
 [dependencies]
-matfile = { version = "0.3", features = ["ndarray"] }
+matfile = { version = "0.5", features = ["ndarray"] }
 ```
 
 While `matfile` arrays abstract over the underlying data type, `ndarray`
