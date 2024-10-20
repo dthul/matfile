@@ -6,8 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5] - 2024-10-20
 ### Changed
-- Updated `ndarray` to verion `0.16`. This is a breaking change for user of the `ndarray` feature.
-- Updated `libflate` to version `2.1`
+- Updated `ndarray` to verion `0.16`. This is a breaking change for user of the `ndarray` feature [@fotonick](https://github.com/fotonick) [#10](https://github.com/dthul/matfile/pull/10)
+- Updated `libflate` to version `2.1` [@fotonick](https://github.com/fotonick) [#10](https://github.com/dthul/matfile/pull/10)
 
 ## [0.4.1] - 2024-01-20
 ### Changed
